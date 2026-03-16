@@ -9,6 +9,8 @@ MYSQL_ADDR="${MYSQL_HOST:-localhost}:${MYSQL_PORT:-3306}"
 MYSQL_USER="${MYSQL_USER:-root}"
 MYSQL_PASSWORD="${MYSQL_PASSWORD:-}"
 MYSQL_DBNAME="${MYSQL_DATABASE:-ppanel}"
+MYSQL_MAX_IDLE="${MYSQL_MAX_IDLE:-5}"
+MYSQL_MAX_OPEN="${MYSQL_MAX_OPEN:-20}"
 
 # Redis — Railway plugin injects REDIS_URL or individual vars
 REDIS_ADDR="${REDIS_HOST:-localhost}:${REDIS_PORT:-6379}"
@@ -55,8 +57,8 @@ MySQL:
     Password: ${MYSQL_PASSWORD}
     Dbname: ${MYSQL_DBNAME}
     Config: charset=utf8mb4&parseTime=true&loc=Asia%2FShanghai
-    MaxIdleConns: 10
-    MaxOpenConns: 10
+    MaxIdleConns: ${MYSQL_MAX_IDLE}
+    MaxOpenConns: ${MYSQL_MAX_OPEN}
     SlowThreshold: 1000
 Redis:
     Host: ${REDIS_ADDR}
