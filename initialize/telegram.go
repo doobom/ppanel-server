@@ -78,5 +78,5 @@ func Telegram(svc *svc.ServiceContext) {
 	svc.Config.Telegram.WebHookDomain = tgConfig.WebHookDomain
 	svc.TelegramBot = bot
 
-	logger.Info("[Init Telegram Config] Webhook set success")
+	logger.Info("[Init Telegram Config] Webhook set success, Telegram Bot is running, Bot Name: ", logger.Field("bot_name", tg.BotName))
 }
