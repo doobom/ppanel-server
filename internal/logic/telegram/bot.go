@@ -97,14 +97,26 @@ func SetWebhook(ctx *gin.Context, svcCtx *svc.ServiceContext) error {
 	configs, _ := svcCtx.SystemModel.GetSiteConfig(ctx)
 	cfg := &types.SiteConfig{}
 	tool.SystemConfigSliceReflectToStruct(configs, cfg)
+
+	tgCfg, err := GetTelegramConfig(ctx, svcCtx)
+	if err != nil {
+		return errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "get telegram config error: %v", err)
+	}
+
+	secret := tool.Md5Encode(tgCfg.TelegramBotToken, false)
+	webhookURL := fmt.Sprintf("%s/v1/telegram/webhook?secret=%s", cfg.Host, secret)
+
 	req, _ := http.NewRequest("GET", ApiLink(ctx, svcCtx, "setWebhook"), nil)
 	q := req.URL.Query()
-	q.Add("url", cfg.Host+"/v1/telegram/webhook")
+	q.Add("url", webhookURL)
 	req.URL.RawQuery = q.Encode()
-	_, err := http.DefaultClient.Do(req)
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "set webhook error: %v", err)
 	}
+	defer resp.Body.Close()
+
 	return nil
 }
 
