@@ -15,22 +15,37 @@ func RegisterTelegramHandlers(router *gin.Engine, serverCtx *svc.ServiceContext)
 }
 
 func TelegramHandler(svcCtx *svc.ServiceContext) func(c *gin.Context) {
-	return func(c *gin.Context) {
-		// auth secret
-		secret := c.Query("secret")
-		if secret != tool.Md5Encode(svcCtx.Config.Telegram.BotToken, false) {
-			logger.WithContext(c.Request.Context()).Error("[TelegramHandler] Secret is wrong", logger.Field("request secret", secret), logger.Field("config secret", tool.Md5Encode(svcCtx.Config.Telegram.BotToken, false)), logger.Field("token", svcCtx.Config.Telegram.BotToken))
-			c.Abort()
-			result.HttpResult(c, nil, nil)
-			return
-		}
-		var request tgbotapi.Update
-		if err := c.BindJSON(&request); err != nil {
-			logger.WithContext(c.Request.Context()).Error("[TelegramHandler] Failed to bind request", logger.Field("error", err.Error()))
-			c.Abort()
-			result.HttpResult(c, nil, err)
-		}
-		l := telegram.NewTelegramLogic(c, svcCtx)
-		l.TelegramLogic(&request)
-	}
+    return func(c *gin.Context) {
+        secret := c.Query("secret")
+
+        // 从数据库读 token，和 SetWebhook 时保持同一来源
+        tgCfg, err := telegram.GetTelegramConfig(c, svcCtx)
+        if err != nil || tgCfg.TelegramBotToken == "" {
+            logger.WithContext(c.Request.Context()).Error("[TelegramHandler] Get telegram config failed", logger.Field("error", err))
+            c.Abort()
+            result.HttpResult(c, nil, nil)
+            return
+        }
+
+        expected := tool.Md5Encode(tgCfg.TelegramBotToken, false)
+        if secret != expected {
+            logger.WithContext(c.Request.Context()).Error("[TelegramHandler] Secret mismatch",
+                logger.Field("request_secret", secret),
+                logger.Field("expected_secret", expected),
+            )
+            c.Abort()
+            result.HttpResult(c, nil, nil)
+            return
+        }
+
+        var request tgbotapi.Update
+        if err := c.BindJSON(&request); err != nil {
+            logger.WithContext(c.Request.Context()).Error("[TelegramHandler] Failed to bind request", logger.Field("error", err.Error()))
+            c.Abort()
+            result.HttpResult(c, nil, err)
+            return
+        }
+        l := telegram.NewTelegramLogic(c, svcCtx)
+        l.TelegramLogic(&request)
+    }
 }

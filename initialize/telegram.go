@@ -77,6 +77,6 @@ func Telegram(svc *svc.ServiceContext) {
 	svc.Config.Telegram.EnableNotify = tgConfig.EnableNotify
 	svc.Config.Telegram.WebHookDomain = tgConfig.WebHookDomain
 	svc.TelegramBot = bot
-
+	// only set enable to true when bot is successfully initialized.
 	logger.Info("[Init Telegram Config] Webhook set success, Telegram Bot is running, Bot Name: ", logger.Field("bot_name", tg.BotName))
 }
