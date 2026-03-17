@@ -99,7 +99,7 @@ func SetWebhook(ctx *gin.Context, svcCtx *svc.ServiceContext) error {
 	tool.SystemConfigSliceReflectToStruct(configs, cfg)
 	req, _ := http.NewRequest("GET", ApiLink(ctx, svcCtx, "setWebhook"), nil)
 	q := req.URL.Query()
-	q.Add("url", cfg.Host+"/telegram/webhook")
+	q.Add("url", cfg.Host+"/v1/telegram/webhook")
 	req.URL.RawQuery = q.Encode()
 	_, err := http.DefaultClient.Do(req)
 	if err != nil {
