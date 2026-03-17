@@ -6,11 +6,13 @@ type Platform int
 
 const (
 	SMTP Platform = iota
+	Resend
 	unsupported
 )
 
 var platformNames = map[string]Platform{
 	"smtp":        SMTP,
+	"resend":      Resend,
 	"unsupported": unsupported,
 }
 
@@ -42,6 +44,14 @@ func GetSupportedPlatforms() []types.PlatformInfo {
 				"pass": "pass",
 				"from": "from",
 				"ssl":  "ssl",
+			},
+		},
+		{
+			Platform:    Resend.String(),
+			PlatformUrl: "https://resend.com",
+			PlatformFieldDescription: map[string]string{
+				"api_key": "api_key",
+				"from":    "from",
 			},
 		},
 	}
