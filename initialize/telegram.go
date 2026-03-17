@@ -21,7 +21,7 @@ func Telegram(svc *svc.ServiceContext) {
 		logger.Errorf("[Init Telegram Config] Get Telegram Config Error: %s", err.Error())
 		return
 	}
-	// var tg config.Telegram
+	 var tg config.Telegram
 
 	tgConfig := new(auth.TelegramAuthConfig)
 	if err = tgConfig.Unmarshal(method.Config); err != nil {
