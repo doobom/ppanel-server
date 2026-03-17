@@ -9,6 +9,48 @@ const BindNotify = `🤖 **尊敬的用户，您已成功绑定 Bot！**
 您现在可以通过该 Bot 随时管理您的账户和服务。如有任何问题，请联系客服。💬
 `
 
+const BindUsage = `❌ *绑定格式错误*
+
+请使用以下任一方式绑定账号：
+
+方式一（订阅链接）：
+` + "`/bind https://your-domain.com/api/subscribe?token=xxxxxx`" + `
+
+方式二（裸 token）：
+` + "`/bind xxxxxx`" + `
+
+订阅链接或 token 可在网页端「个人中心 → 我的订阅」中获取。`
+
+const BindTokenInvalid = `⚠️ *绑定失败*
+
+Token 无效或不存在，请检查订阅链接是否正确。`
+
+const BindFailed = `❌ *绑定失败*
+
+系统出现错误，请稍后重试或联系客服。`
+
+const BindAlreadyBound = `⚠️ *绑定失败*
+
+该 Telegram 账号已绑定其他账户，请先解绑后再试。`
+
+const TrafficNotBound = `❌ *未绑定账号*
+
+请先将您的账号与此 Bot 绑定。
+
+使用 ` + "`/bind <token>`" + ` 或点击网页端「个人中心 → 绑定 Telegram」完成绑定。`
+
+const TrafficQueryFailed = `❌ *查询失败*
+
+流量信息获取失败，请稍后重试或联系客服。`
+
+const TrafficNoSubscribe = `📭 *暂无有效订阅*
+
+您当前没有有效的订阅套餐，请前往网页端购买套餐。`
+
+const TrafficInfo = `📊 *流量使用情况*
+{{.Lines}}
+_查询时间: {{.Time}}_`
+
 const PurchaseNotify = `🎉 **尊敬的用户，您已成功购买服务！**
 
 **订单编号**: {{.OrderNo}}
@@ -31,7 +73,6 @@ const RenewalNotify = `🎉 **尊敬的用户，您已成功续费服务！**
 您的服务已成功激活，随时为您提供高速、稳定、安全的网络体验。  
 如有疑问，请联系客服，我们将竭诚为您服务！💬`
 
-// RechargeNotify 充值通知
 const RechargeNotify = `💳 **尊敬的用户，您的账户充值已完成！**
 
 💰 **充值金额**: {{.OrderAmount}} 
@@ -43,7 +84,6 @@ const RechargeNotify = `💳 **尊敬的用户，您的账户充值已完成！*
 余额可用于购买套餐或其他服务。  
 如有疑问，请联系客服，我们将竭诚为您服务！💬`
 
-// AdminOrderNotify 管理员订单通知
 const AdminOrderNotify = `
 📦 **订单通知**
 
@@ -57,7 +97,6 @@ const AdminOrderNotify = `
 💳 **支付方式**: _{{.PaymentMethod}}_
 `
 
-// AdminOrderDaily 管理员每日订单统计
 const AdminOrderDaily = `
 📊 **每日流水统计**
 
@@ -79,7 +118,6 @@ const AdminOrderDaily = `
 以上数据为系统自动统计，仅供参考。如需详细数据或对账，请查看管理后台。
 `
 
-// SubscribeExpireNotify 订阅到期通知
 const SubscribeExpireNotify = `尊敬的用户，您的订阅即将到期。
 
 📦 **订阅名称**: _{{.SubscribeName}}_
@@ -89,7 +127,6 @@ const SubscribeExpireNotify = `尊敬的用户，您的订阅即将到期。
 为确保服务不受影响，请尽快续费。
 如有疑问，请联系客服，我们将竭诚为您服务！💬`
 
-// UnbindNotify 解绑通知
 const UnbindNotify = `🤖 尊敬的用户，您好！
 
 您的账户已成功解绑：
@@ -103,7 +140,6 @@ const UnbindNotify = `🤖 尊敬的用户，您好！
 如有任何疑问，请随时联系客服，我们将竭诚为您服务！
 感谢您的理解与支持！`
 
-// ResetTrafficNotify 重置流量通知
 const ResetTrafficNotify = `📊 尊敬的用户，您好！
 
 您的账户流量已成功重置：
