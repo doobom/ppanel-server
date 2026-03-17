@@ -34,10 +34,12 @@ echo "[INFO] 备份完成，文件大小: ${FILE_SIZE}"
 # ── 发送到 Telegram ───────────────────────────────────────────
 echo "[INFO] 正在发送到 Telegram..."
 
+CAPTION="$(printf '🗄 <b>MySQL 备份</b>\n📦 数据库: <code>%s</code>\n📅 时间: <code>%s</code>\n💾 大小: <code>%s</code>' "${MYSQL_DATABASE}" "${TIMESTAMP}" "${FILE_SIZE}")"
+
 RESPONSE=$(curl -s -w "\n%{http_code}" \
   -F "chat_id=${TELEGRAM_CHAT_ID}" \
   -F "document=@${FILEPATH};filename=${FILENAME}" \
-  -F "caption=🗄 <b>MySQL 备份</b>%0A📦 数据库: <code>${MYSQL_DATABASE}</code>%0A📅 时间: <code>${TIMESTAMP}</code>%0A💾 大小: <code>${FILE_SIZE}</code>" \
+  -F "caption=${CAPTION}" \
   -F "parse_mode=HTML" \
   "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument")
 
