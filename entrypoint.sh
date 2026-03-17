@@ -8,5 +8,5 @@ echo "[INFO] 备份服务启动，cron: ${CRON_SCHEDULE}"
 # 写入 crontab
 echo "${CRON_SCHEDULE} /app/backup.sh >> /proc/1/fd/1 2>&1" | crontab -
 
-# 启动 crond（前台运行，保持容器存活）
-crond -f -l 2
+# 启动 cron（前台运行，保持容器存活）
+cron && tail -f /dev/null
