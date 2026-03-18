@@ -43,6 +43,8 @@ func (l *BindOAuthLogic) BindOAuth(req *types.BindOAuthRequest) (resp *types.Bin
 		uri, err = l.github()
 	case "facebook":
 		uri, err = l.facebook()
+	case "telegram":
+		uri, err = l.telegram(req) // add telegram oauth, issue 107
 	default:
 		l.Errorw("oauth login method not support: %v", logger.Field("method", req.Method))
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "oauth login method not support: %v", req.Method)
@@ -109,4 +111,28 @@ func (l *BindOAuthLogic) apple(req *types.BindOAuthRequest) (string, error) {
 }
 func (l *BindOAuthLogic) github() (string, error) {
 	return "", nil
+}
+func (l *BindOAuthLogic) telegram(req *types.BindOAuthRequest) (string, error) {// add telegram oauth, issue 107
+	// get telegram config
+	tgCfg := l.svcCtx.Config.Telegram
+	if tgCfg.BotToken == "" || tgCfg.BotName == "" {
+		return "", errors.New("telegram bot not configured")
+	}
+
+	// get userId from context, if not exist, return error
+	userId, ok := l.ctx.Value("UserId").(int64)
+	if !ok || userId == 0 {
+		return "", errors.New("user not found in context")
+	}
+
+	// generate session id and save to redis, expire in 5 minutes
+	sessionId := fmt.Sprintf("%d-%d", userId, time.Now().UnixNano())
+	cacheKey := fmt.Sprintf("%v:%v", config.SessionIdKey, sessionId)
+	if err := l.svcCtx.Redis.Set(l.ctx, cacheKey, userId, 5*60*time.Second).Err(); err != nil {
+		return "", err
+	}
+
+	// generate Telegram Bot redirect link with session id as parameter, Telegram Bot will return the session id when user click the link, then we can get the user id from redis and bind the Telegram account with the user account.
+	uri := fmt.Sprintf("https://t.me/%s?start=%s", tgCfg.BotName, sessionId)
+	return uri, nil
 }
