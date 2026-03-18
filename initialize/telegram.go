@@ -54,8 +54,13 @@ func Telegram(svc *svc.ServiceContext) {
 				}
 			}
 		}()
+		logger.Info("[Init Telegram] Long polling mode started")
 	} else {
-		wh, err := tgbotapi.NewWebhook(fmt.Sprintf("%s/v1/telegram/webhook?secret=%s", tgConfig.WebHookDomain, tool.Md5Encode(tgConfig.BotToken, false)))
+		webhookURL := fmt.Sprintf("%s/v1/telegram/webhook?secret=%s",
+            tgConfig.WebHookDomain,
+            tool.Md5Encode(tgConfig.BotToken, false),
+        )
+		wh, err := tgbotapi.NewWebhook(webhookURL)
 		if err != nil {
 			logger.Errorf("[Init Telegram Config] New Webhook Error: %s", err.Error())
 			return
@@ -65,6 +70,7 @@ func Telegram(svc *svc.ServiceContext) {
 			logger.Errorf("[Init Telegram Config] Request Webhook Error: %s", err.Error())
 			return
 		}
+		logger.Infof("[Init Telegram] Webhook registered: %s", webhookURL)
 	}
 
 	user, err := bot.GetMe()
@@ -77,6 +83,6 @@ func Telegram(svc *svc.ServiceContext) {
 	svc.Config.Telegram.EnableNotify = tgConfig.EnableNotify
 	svc.Config.Telegram.WebHookDomain = tgConfig.WebHookDomain
 	svc.TelegramBot = bot
-	// only set enable to true when bot is successfully initialized.
+	// only set enable to true when bot is successfully initialized. fix docker building error: var tg is not used;
 	logger.Info("[Init Telegram Config] Webhook set success, Telegram Bot is running, Bot Name: ", logger.Field("bot_name", tg.BotName))
 }
