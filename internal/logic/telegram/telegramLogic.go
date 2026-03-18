@@ -14,6 +14,7 @@ import (
 	"github.com/perfect-panel/server/pkg/logger"
 	"github.com/perfect-panel/server/pkg/tool"
 	"github.com/perfect-panel/server/pkg/xerr"
+	"github.com/perfect-panel/server/pkg/traffic"
 	"github.com/pkg/errors"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -101,9 +102,9 @@ func (l *TelegramLogic) traffic(chatId int64) error {
 			expireStr = "永久"
 		}
 
-		usedStr := tool.FormatTraffic(used)
-		totalStr := tool.FormatTraffic(total)
-		remainingStr := tool.FormatTraffic(remaining)
+		usedStr := traffic.AutoConvert(used, true)
+		totalStr := traffic.AutoConvert(total, true)
+		remainingStr := traffic.AutoConvert(remaining, true)
 
 		var usagePercent float64
 		if total > 0 {
