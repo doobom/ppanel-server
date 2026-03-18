@@ -15,6 +15,10 @@ import (
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/logger"
+
+	"github.com/perfect-panel/server/internal/config"
+	"github.com/perfect-panel/server/internal/model/user"
+	"github.com/perfect-panel/server/pkg/constant"
 )
 
 type BindOAuthLogic struct {
@@ -44,12 +48,7 @@ func (l *BindOAuthLogic) BindOAuth(req *types.BindOAuthRequest) (resp *types.Bin
 	case "facebook":
 		uri, err = l.facebook()
 	case "telegram":// add telegram oauth, issue 107
-		bindTg := NewBindTelegramLogic(l.ctx, l.svcCtx)
-		resp, err := bindTg.BindTelegram()
-		if err != nil {
-			break
-		}
-		uri = resp.Url 
+		uri, err = l.telegram(req) 
 	default:
 		l.Errorw("oauth login method not support: %v", logger.Field("method", req.Method))
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "oauth login method not support: %v", req.Method)
@@ -123,10 +122,18 @@ func (l *BindOAuthLogic) telegram(req *types.BindOAuthRequest) (string, error) {
 		return "", errors.New("telegram bot not configured")
 	}
 
-	session, ok := l.ctx.Value("session").(string)
-	if !ok || session == "" {
-		return "", errors.New("session not found in context")
+	// get user info from context to generate sessionId, and save sessionId with userId in Redis, then pass sessionId to Telegram bot, when user click the link, Telegram bot will get sessionId, then get userId from Redis, finally bind the Telegram account with the user account.
+	userInfo, ok := l.ctx.Value(constant.CtxKeyUser).(*user.User)
+	if !ok || userInfo == nil {
+		return "", errors.New("user not found in context")
 	}
 
-	return fmt.Sprintf("https://t.me/%s?start=%s", tgCfg.BotName, session), nil
+	// generate sessionId, format: userId-timestamp, and save it in Redis with 5 minutes expiration time
+	sessionId := fmt.Sprintf("%d-%d", userInfo.Id, time.Now().UnixNano())
+	cacheKey := fmt.Sprintf("%v:%v", config.SessionIdKey, sessionId)
+	if err := l.svcCtx.Redis.Set(l.ctx, cacheKey, userInfo.Id, 5*60*time.Second).Err(); err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("https://t.me/%s?start=%s", tgCfg.BotName, sessionId), nil
 }
