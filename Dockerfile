@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gzip \
     cron \
+    bash \
     tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /app /backups
