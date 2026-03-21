@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mariadb-client \
     curl \
     gzip \
-    dcron \
+    cron \
     tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /app /backups
@@ -21,18 +21,18 @@ COPY backup.sh /app/backup.sh
 RUN chmod +x /app/backup.sh
 
 # 使用 crontab 文件（更规范）
-COPY crontab /etc/crontabs/root
-RUN chmod 0644 /etc/crontabs/root
+COPY crontab /etc/cron.d/backup
+RUN chmod 0644 /etc/cron.d/backup
 
 # 状态文件用于 HEALTHCHECK
 RUN touch /app/last_backup_status && chmod 666 /app/last_backup_status
 
 # 前台运行 cron，日志输出到 stdout（Railway 会收集）
-CMD ["crond", "-f", "-L", "/dev/stdout"]
+CMD ["cron", "-f", "-L", "15"]
 
 HEALTHCHECK --interval=5m --timeout=10s --start-period=1m --retries=3 \
   CMD sh -c '\
-    pidof crond > /dev/null || exit 1; \
+    pidof cron > /dev/null || exit 1; \
     grep -q "^success" /app/last_backup_status || { \
       LAST=$(cat /app/last_backup_status 2>/dev/null || echo "never"); \
       echo "Last backup: $LAST"; \
