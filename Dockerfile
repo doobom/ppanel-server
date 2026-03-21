@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cron \
     bash \
     tzdata \
+    ca-certificates \          # ← 加这一行（关键！）
+    && update-ca-certificates \  # ← 加这一行，确保生成 /etc/ssl/certs/ca-certificates.crt
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /app /backups
 
