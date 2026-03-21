@@ -42,6 +42,7 @@ send_telegram() {
 
 send_telegram_file() {
   local filepath="$1" db="$2" ts="$3" size="$4"
+
   echo "[DEBUG] 准备发送文件: $filepath (存在? $( [ -f "$filepath" ] && echo 是 || echo 否 ))"
 
   local status="✅ 成功"
@@ -49,13 +50,14 @@ send_telegram_file() {
     status="❌ 失败（文件丢失）"
   fi
 
-  local caption=...
+  local caption
+  caption=$(printf '🗄 <b>MySQL 备份 (%s)</b>\n📦 数据库: <code>%s</code>\n📅 时间: <code>%s</code>\n💾 大小: <code>%s</code>' "$status" "$db" "$ts" "$size")
   echo "[DEBUG] caption: $caption"
 
   echo "[DEBUG] 开始 curl 发送到 Telegram..."
   RESPONSE=$(curl -v -s -w "\n%{http_code}" \
     -F "chat_id=${TELEGRAM_CHAT_ID}" \
-    -F "document=@$$   {filepath};filename=   $${db}_${ts}.sql.gz" \
+    -F "document=@${filepath};filename=${db}_${ts}.sql.gz" \
     -F "caption=${caption}" \
     -F "parse_mode=HTML" \
     "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" 2>&1)
@@ -125,19 +127,17 @@ for DB in $(echo "$MYSQL_DATABASES" | tr ',' ' '); do
   echo "[INFO] $DB 备份完成，大小: $FILE_SIZE"
 
   # 发送 Telegram（无论成功失败都尝试保留文件直到发送完）
+  # 发送 Telegram
   send_telegram_file "$FILEPATH" "$DB" "$TIMESTAMP" "$FILE_SIZE"
 
-  # 现在决定是否保留这个文件
+  # 保留策略
   if [ "$KEEP_LOCAL_BACKUPS" -gt 0 ]; then
-    # 保留策略：保留最新 KEEP_LOCAL_BACKUPS 份（包括刚刚这个）
-    # 注意：文件名带 TIMESTAMP，所以 sort -r 会把最新放前面
-    find "$$   BACKUP_DIR" -name "*.sql.gz" -type f | sort -r | tail -n +   $$((KEEP_LOCAL_BACKUPS + 1)) | xargs -r rm -f
-    echo "[INFO] 保留策略执行，当前保留最新 $KEEP_LOCAL_BACKUPS 份"
+    find "$BACKUP_DIR" -name "*.sql.gz" -type f | sort -r | tail -n +$((KEEP_LOCAL_BACKUPS + 1)) | xargs -r rm -f
+    echo "[INFO] 保留策略执行，当前应保留最新 $KEEP_LOCAL_BACKUPS 份"
   else
     rm -f "$FILEPATH"
     echo "[INFO] 不保留本地备份，已删除 $FILEPATH"
   fi
-
   # trap - EXIT
 done
 
