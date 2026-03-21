@@ -30,6 +30,44 @@ run_sql() {
   }
 }
 
+# ── 函数：执行 TELEGRAM 发送 ────────────────────────────────────────────────────────
+send_telegram() {
+  local text="$1"
+  local extra="${2:-}"
+  curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+    -d chat_id="${TELEGRAM_CHAT_ID}" \
+    -d text="${text}${extra}" \
+    -d parse_mode="HTML" > /dev/null || true
+}
+
+send_telegram_file() {
+  local filepath="$1"
+  local db="$2"
+  local ts="$3"
+  local size="$4"
+  local status="✅ 成功"
+  local caption
+
+  if [ ! -f "$filepath" ]; then
+    status="❌ 失败（文件丢失）"
+  fi
+
+  caption="$(printf '🗄 <b>MySQL 备份 (%s)</b>\n📦 数据库: <code>%s</code>\n📅 时间: <code>%s</code>\n💾 大小: <code>%s</code>' "$status" "$db" "$ts" "$size")"
+
+  RESPONSE=$(curl -s -w "\n%{http_code}" \
+    -F "chat_id=${TELEGRAM_CHAT_ID}" \
+    -F "document=@${filepath};filename=${db}_${ts}.sql.gz" \
+    -F "caption=${caption}" \
+    -F "parse_mode=HTML" \
+    "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument")
+
+  HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+
+  if [ "$HTTP_CODE" != "200" ]; then
+    echo "[ERROR] Telegram 发送失败 HTTP $HTTP_CODE"
+  fi
+}
+
 # ── 备份前检查连接 ───────────────────────────────────────────────────────
 echo "[INFO] 检查 MySQL 连接..."
 mysqladmin --host="$MYSQL_HOST" --port="$MYSQL_PORT" --user="$MYSQL_USER" --password="$MYSQL_PASSWORD" ping || {
@@ -74,7 +112,7 @@ for DB in $(echo "$MYSQL_DATABASES" | tr ',' ' '); do
     "$DB" | gzip > "$FILEPATH" || {
       echo "[ERROR] $DB 备份失败"
       SUCCESS=false
-      ERROR_MSG="$ERROR_MSG\n$db 备份失败"
+      ERROR_MSG="$ERROR_MSG\n$DB 备份失败"
       rm -f "$FILEPATH"
       continue
   }
@@ -105,39 +143,3 @@ else
   echo "failed ${TIMESTAMP} ${ERROR_MSG}" > "$LAST_STATUS"
 fi
 
-send_telegram() {
-  local text="$1"
-  local extra="${2:-}"
-  curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-    -d chat_id="${TELEGRAM_CHAT_ID}" \
-    -d text="${text}${extra}" \
-    -d parse_mode="HTML" > /dev/null || true
-}
-
-send_telegram_file() {
-  local filepath="$1"
-  local db="$2"
-  local ts="$3"
-  local size="$4"
-  local status="✅ 成功"
-  local caption
-
-  if [ ! -f "$filepath" ]; then
-    status="❌ 失败（文件丢失）"
-  fi
-
-  caption="$(printf '🗄 <b>MySQL 备份 (%s)</b>\n📦 数据库: <code>%s</code>\n📅 时间: <code>%s</code>\n💾 大小: <code>%s</code>' "$status" "$db" "$ts" "$size")"
-
-  RESPONSE=$(curl -s -w "\n%{http_code}" \
-    -F "chat_id=${TELEGRAM_CHAT_ID}" \
-    -F "document=@${filepath};filename=${db}_${ts}.sql.gz" \
-    -F "caption=${caption}" \
-    -F "parse_mode=HTML" \
-    "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument")
-
-  HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-
-  if [ "$HTTP_CODE" != "200" ]; then
-    echo "[ERROR] Telegram 发送失败 HTTP $HTTP_CODE"
-  fi
-}
