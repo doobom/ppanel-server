@@ -41,30 +41,34 @@ send_telegram() {
 }
 
 send_telegram_file() {
-  local filepath="$1"
-  local db="$2"
-  local ts="$3"
-  local size="$4"
-  local status="✅ 成功"
-  local caption
+  local filepath="$1" db="$2" ts="$3" size="$4"
+  echo "[DEBUG] 准备发送文件: $filepath (存在? $( [ -f "$filepath" ] && echo 是 || echo 否 ))"
 
+  local status="✅ 成功"
   if [ ! -f "$filepath" ]; then
     status="❌ 失败（文件丢失）"
   fi
 
-  caption="$(printf '🗄 <b>MySQL 备份 (%s)</b>\n📦 数据库: <code>%s</code>\n📅 时间: <code>%s</code>\n💾 大小: <code>%s</code>' "$status" "$db" "$ts" "$size")"
+  local caption=...
+  echo "[DEBUG] caption: $caption"
 
-  RESPONSE=$(curl -s -w "\n%{http_code}" \
+  echo "[DEBUG] 开始 curl 发送到 Telegram..."
+  RESPONSE=$(curl -v -s -w "\n%{http_code}" \
     -F "chat_id=${TELEGRAM_CHAT_ID}" \
-    -F "document=@${filepath};filename=${db}_${ts}.sql.gz" \
+    -F "document=@$$   {filepath};filename=   $${db}_${ts}.sql.gz" \
     -F "caption=${caption}" \
     -F "parse_mode=HTML" \
-    "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument")
+    "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" 2>&1)
 
   HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+  echo "[DEBUG] HTTP_CODE=$HTTP_CODE"
+  echo "[DEBUG] 完整 RESPONSE:"
+  echo "$RESPONSE"
 
   if [ "$HTTP_CODE" != "200" ]; then
     echo "[ERROR] Telegram 发送失败 HTTP $HTTP_CODE"
+  else
+    echo "[INFO] Telegram 发送成功"
   fi
 }
 
@@ -95,7 +99,7 @@ for DB in $(echo "$MYSQL_DATABASES" | tr ',' ' '); do
     continue
   }
 
-  trap 'rm -f "$FILEPATH"' EXIT
+  # trap 'rm -f "$FILEPATH"' EXIT
 
   echo "[INFO] 备份数据库 $DB → $FILENAME"
 
@@ -120,17 +124,21 @@ for DB in $(echo "$MYSQL_DATABASES" | tr ',' ' '); do
   FILE_SIZE=$(du -sh "$FILEPATH" | cut -f1)
   echo "[INFO] $DB 备份完成，大小: $FILE_SIZE"
 
-  # 发送 Telegram
+  # 发送 Telegram（无论成功失败都尝试保留文件直到发送完）
   send_telegram_file "$FILEPATH" "$DB" "$TIMESTAMP" "$FILE_SIZE"
 
-  # 保留策略：删除旧文件（只保留当前成功的 + 旧的 N-1 份）
+  # 现在决定是否保留这个文件
   if [ "$KEEP_LOCAL_BACKUPS" -gt 0 ]; then
-    find "$BACKUP_DIR" -name "*.sql.gz" -type f | sort -r | tail -n +$((KEEP_LOCAL_BACKUPS + 1)) | xargs -r rm -f
+    # 保留策略：保留最新 KEEP_LOCAL_BACKUPS 份（包括刚刚这个）
+    # 注意：文件名带 TIMESTAMP，所以 sort -r 会把最新放前面
+    find "$$   BACKUP_DIR" -name "*.sql.gz" -type f | sort -r | tail -n +   $$((KEEP_LOCAL_BACKUPS + 1)) | xargs -r rm -f
+    echo "[INFO] 保留策略执行，当前保留最新 $KEEP_LOCAL_BACKUPS 份"
   else
     rm -f "$FILEPATH"
+    echo "[INFO] 不保留本地备份，已删除 $FILEPATH"
   fi
 
-  trap - EXIT
+  # trap - EXIT
 done
 
 # ── 备份后自定义 SQL ─────────────────────────────────────────────────────
