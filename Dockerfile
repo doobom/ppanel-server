@@ -9,9 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     tzdata \
     ca-certificates \          # ← 加这一行（关键！）
-    && update-ca-certificates \  # ← 加这一行，确保生成 /etc/ssl/certs/ca-certificates.crt
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /app /backups
+
+# 单独一层运行 update-ca-certificates（确保包已安装）
+RUN update-ca-certificates
 
 # 设置时区（可选，根据你位置调整；Railway 默认 UTC，可不设）
 ENV TZ=Etc/UTC
