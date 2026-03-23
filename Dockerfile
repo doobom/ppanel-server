@@ -26,14 +26,17 @@ COPY backup.sh /app/backup.sh
 RUN chmod +x /app/backup.sh
 
 # 使用 crontab 文件（更规范）
-COPY crontab /etc/cron.d/backup
-RUN chmod 0644 /etc/cron.d/backup
+#COPY crontab /etc/cron.d/backup
+#RUN chmod 0644 /etc/cron.d/backup
 
 # 状态文件用于 HEALTHCHECK
 RUN touch /app/last_backup_status && chmod 666 /app/last_backup_status
 
 # 前台运行 cron，日志输出到 stdout（Railway 会收集）
-CMD ["cron", "-f", "-L", "15"]
+# CMD ["cron", "-f", "-L", "15"]
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 HEALTHCHECK --interval=5m --timeout=10s --start-period=1m --retries=3 \
   CMD sh -c '\
