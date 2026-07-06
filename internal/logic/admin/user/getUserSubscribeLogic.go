@@ -27,7 +27,7 @@ func NewGetUserSubscribeLogic(ctx context.Context, svcCtx *svc.ServiceContext) *
 }
 
 func (l *GetUserSubscribeLogic) GetUserSubscribe(req *types.GetUserSubscribeListRequest) (resp *types.GetUserSubscribeListResponse, err error) {
-	data, err := l.svcCtx.UserModel.QueryUserSubscribe(l.ctx, req.UserId, 0, 1, 2, 3, 4)
+	data, err := l.svcCtx.Store.User().QueryUserSubscribe(l.ctx, req.UserId, 0, 1, 2, 3, 4, 5)
 	if err != nil {
 		l.Errorw("[GetUserSubscribeLogs] Get User Subscribe Error:", logger.Field("err", err.Error()))
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "Get User Subscribe Error")
@@ -41,6 +41,7 @@ func (l *GetUserSubscribeLogic) GetUserSubscribe(req *types.GetUserSubscribeList
 	for _, item := range data {
 		var sub types.UserSubscribe
 		tool.DeepCopy(&sub, item)
+		sub.Short, _ = tool.FixedUniqueString(item.Token, 8, "")
 		resp.List = append(resp.List, sub)
 	}
 	return

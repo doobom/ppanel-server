@@ -1,20 +1,20 @@
 package subscribe
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
 
-	"github.com/perfect-panel/server/pkg/adapter"
-	"github.com/perfect-panel/server/pkg/adapter/shadowrocket"
-	"github.com/perfect-panel/server/pkg/adapter/surfboard"
-
-	"github.com/perfect-panel/server/internal/model/server"
+	"github.com/perfect-panel/server/adapter"
+	"github.com/perfect-panel/server/internal/model/client"
+	"github.com/perfect-panel/server/internal/model/log"
+	"github.com/perfect-panel/server/internal/model/node"
+	"github.com/perfect-panel/server/internal/report"
 
 	"github.com/perfect-panel/server/internal/model/user"
 
-	"github.com/gin-gonic/gin"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/logger"
@@ -25,63 +25,188 @@ import (
 
 //goland:noinspection GoNameStartsWithPackageName
 type SubscribeLogic struct {
-	ctx *gin.Context
-	svc *svc.ServiceContext
+	ctx     context.Context
+	svc     *svc.ServiceContext
+	request RequestMeta
 	logger.Logger
 }
 
-func NewSubscribeLogic(ctx *gin.Context, svc *svc.ServiceContext) *SubscribeLogic {
+type RequestMeta struct {
+	Host       string
+	RequestURI string
+	UserAgent  string
+	ClientIP   string
+}
+
+func NewSubscribeLogic(ctx context.Context, svc *svc.ServiceContext, request RequestMeta) *SubscribeLogic {
 	return &SubscribeLogic{
-		ctx:    ctx,
-		svc:    svc,
-		Logger: logger.WithContext(ctx.Request.Context()),
+		ctx:     ctx,
+		svc:     svc,
+		request: request,
+		Logger:  logger.WithContext(ctx),
 	}
 }
 
-func (l *SubscribeLogic) Generate(req *types.SubscribeRequest) (*types.SubscribeResponse, error) {
-	userSub, err := l.getUserSubscribe(req.Token)
+func (l *SubscribeLogic) Handler(req *types.SubscribeRequest) (resp *types.SubscribeResponse, err error) {
+	// query client list
+	clients, err := l.svc.Store.Client().List(l.ctx)
 	if err != nil {
+		l.Errorw("[SubscribeLogic] Query client list failed", logger.Field("error", err.Error()))
+		return nil, err
+	}
+
+	userAgent := strings.ToLower(l.request.UserAgent)
+
+	var targetApp, defaultApp *client.SubscribeApplication
+
+	for _, item := range clients {
+		u := strings.ToLower(item.UserAgent)
+		if item.IsDefault {
+			defaultApp = item
+		}
+
+		if strings.Contains(userAgent, u) {
+			// Special handling for Stash
+			if strings.Contains(userAgent, "stash") && !strings.Contains(u, "stash") {
+				continue
+			}
+			targetApp = item
+			break
+		}
+	}
+	if targetApp == nil {
+		l.Debugf("[SubscribeLogic] No matching client found", logger.Field("userAgent", userAgent))
+		if defaultApp == nil {
+			return nil, errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "No matching client found for user agent: %s", userAgent)
+		}
+		targetApp = defaultApp
+	}
+	// Find user subscribe by token
+	userSubscribe, err := l.getUserSubscribe(req.Token)
+	if err != nil {
+		l.Errorw("[SubscribeLogic] Get user subscribe failed", logger.Field("error", err.Error()), logger.Field("token", req.Token))
 		return nil, err
 	}
 
 	var subscribeStatus = false
 	defer func() {
-		l.logSubscribeActivity(subscribeStatus, userSub, req)
+		l.logSubscribeActivity(subscribeStatus, userSubscribe, req)
 	}()
+	// find subscribe info
+	subscribeInfo, err := l.svc.Store.Subscribe().FindOne(l.ctx, userSubscribe.SubscribeId)
+	if err != nil {
+		l.Errorw("[SubscribeLogic] Find subscribe info failed", logger.Field("error", err.Error()), logger.Field("subscribeId", userSubscribe.SubscribeId))
+		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "Find subscribe info failed: %v", err.Error())
+	}
 
-	servers, err := l.getServers(userSub)
+	// Find server list by user subscribe
+	servers, err := l.getServers(userSubscribe)
 	if err != nil {
 		return nil, err
 	}
+	a := adapter.NewAdapter(
+		targetApp.SubscribeTemplate,
+		adapter.WithServers(servers),
+		adapter.WithSiteName(l.svc.Config.Site.SiteName),
+		adapter.WithSubscribeName(subscribeInfo.Name),
+		adapter.WithOutputFormat(targetApp.OutputFormat),
+		adapter.WithUserInfo(adapter.User{
+			Password:     userSubscribe.UUID,
+			ExpiredAt:    userSubscribe.ExpireTime,
+			Download:     userSubscribe.Download,
+			Upload:       userSubscribe.Upload,
+			Traffic:      userSubscribe.Traffic,
+			SubscribeURL: l.getSubscribeV2URL(),
+		}),
+		adapter.WithParams(req.Params),
+	)
 
-	rules, err := l.getRules()
+	logger.Debugf("[SubscribeLogic] Building client config for user %d with URI %s", userSubscribe.UserId, l.getSubscribeV2URL())
+
+	// Get client config
+	adapterClient, err := a.Client()
 	if err != nil {
-		return nil, err
+		l.Errorw("[SubscribeLogic] Client error", logger.Field("error", err.Error()))
+		return nil, errors.Wrapf(xerr.NewErrCode(500), "Client error: %v", err.Error())
+	}
+	bytes, err := adapterClient.Build()
+	if err != nil {
+		l.Errorw("[SubscribeLogic] Build client config failed", logger.Field("error", err.Error()))
+		return nil, errors.Wrapf(xerr.NewErrCode(500), "Build client config failed: %v", err.Error())
 	}
 
-	resp, headerInfo, err := l.buildClientConfig(req, userSub, servers, rules)
-	if err != nil {
-		return nil, err
+	var formats = []string{"json", "yaml", "conf"}
+
+	headers := make(map[string]string)
+	for _, format := range formats {
+		if format == strings.ToLower(targetApp.OutputFormat) {
+			headers["Content-Disposition"] = fmt.Sprintf("attachment;filename*=UTF-8''%s.%s", url.QueryEscape(l.svc.Config.Site.SiteName), format)
+			headers["Content-Type"] = "application/octet-stream; charset=UTF-8"
+		}
 	}
 
+	resp = &types.SubscribeResponse{
+		Config: bytes,
+		Header: fmt.Sprintf(
+			"upload=%d;download=%d;total=%d;expire=%d",
+			userSubscribe.Upload, userSubscribe.Download, userSubscribe.Traffic, userSubscribe.ExpireTime.Unix(),
+		),
+		Headers: headers,
+	}
 	subscribeStatus = true
-	return &types.SubscribeResponse{
-		Config: resp,
-		Header: headerInfo,
-	}, nil
+	return
 }
 
+func (l *SubscribeLogic) getSubscribeV2URL() string {
+
+	uri := l.request.RequestURI
+	// is gateway mode, add /sub prefix
+	if report.IsGatewayMode() {
+		uri = "/sub" + uri
+	}
+	// use custom domain if configured
+	if l.svc.Config.Subscribe.SubscribeDomain != "" {
+		domains := strings.Split(l.svc.Config.Subscribe.SubscribeDomain, "\n")
+		return fmt.Sprintf("https://%s%s", domains[0], uri)
+	}
+	// use current request host
+	return fmt.Sprintf("https://%s%s", l.request.Host, uri)
+}
+
+// getUserSubscribe 是本次修改的核心部分
 func (l *SubscribeLogic) getUserSubscribe(token string) (*user.Subscribe, error) {
-	userSub, err := l.svc.UserModel.FindOneSubscribeByToken(l.ctx.Request.Context(), token)
+	userSub, err := l.svc.Store.User().FindOneSubscribeByToken(l.ctx, token)
 	if err != nil {
 		l.Infow("[Generate Subscribe]find subscribe error: %v", logger.Field("error", err.Error()), logger.Field("token", token))
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "find subscribe error: %v", err.Error())
 	}
 
-	if userSub.Status > 1 {
-		l.Infow("[Generate Subscribe]subscribe is not available", logger.Field("status", int(userSub.Status)), logger.Field("token", token))
-		return nil, errors.Wrapf(xerr.NewErrCode(xerr.SubscribeNotAvailable), "subscribe is not available")
+	// =========================================================
+	// 修复开始：添加空指针检查 (Fix start)
+	// =========================================================
+	if userSub == nil {
+		l.Infow("[Generate Subscribe] token invalid or user not found", logger.Field("token", token))
+		return nil, errors.New("subscribe token invalid")
 	}
+	// =========================================================
+	// Check if user is enabled
+	userInfo, err := l.svc.Store.User().FindOne(l.ctx, userSub.UserId)
+	if err != nil {
+		l.Infow("[Generate Subscribe] failed to get user info", logger.Field("error", err.Error()), logger.Field("userId", userSub.UserId))
+		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "failed to get user info: %v", err.Error())
+	}
+	if !*userInfo.Enable {
+		l.Infow("[Generate Subscribe] user account is disabled", logger.Field("userId", userSub.UserId))
+		return nil, errors.Wrapf(xerr.NewErrCode(xerr.UserDisabled), "User account is disabled")
+	}
+	// 修复结束 (Fix end)
+	// =========================================================
+
+	//  Ignore expiration check
+	//if userSub.Status > 1 {
+	// l.Infow("[Generate Subscribe]subscribe is not available", logger.Field("status", int(userSub.Status)), logger.Field("token", token))
+	// return nil, errors.Wrapf(xerr.NewErrCode(xerr.SubscribeNotAvailable), "subscribe is not available")
+	//}
 
 	return userSub, nil
 }
@@ -91,72 +216,114 @@ func (l *SubscribeLogic) logSubscribeActivity(subscribeStatus bool, userSub *use
 		return
 	}
 
-	err := l.svc.UserModel.InsertSubscribeLog(l.ctx.Request.Context(), &user.SubscribeLog{
-		UserId:          userSub.UserId,
-		UserSubscribeId: userSub.Id,
+	subscribeLog := log.Subscribe{
 		Token:           req.Token,
-		IP:              l.ctx.ClientIP(),
-		UserAgent:       l.ctx.Request.UserAgent(),
+		UserAgent:       req.UA,
+		ClientIP:        l.request.ClientIP,
+		UserSubscribeId: userSub.Id,
+	}
+
+	content, _ := subscribeLog.Marshal()
+
+	err := l.svc.Store.Log().Insert(l.ctx, &log.SystemLog{
+		Type:     log.TypeSubscribe.Uint8(),
+		ObjectID: userSub.UserId, // log user id
+		Date:     time.Now().Format(time.DateOnly),
+		Content:  string(content),
 	})
 	if err != nil {
 		l.Errorw("[Generate Subscribe]insert subscribe log error: %v", logger.Field("error", err.Error()))
 	}
 }
 
-func (l *SubscribeLogic) getServers(userSub *user.Subscribe) ([]*server.Server, error) {
+func (l *SubscribeLogic) getServers(userSub *user.Subscribe) ([]*node.Node, error) {
 	if l.isSubscriptionExpired(userSub) {
-		return l.createExpiredServers(), nil
+		return l.createNoticeServers("订阅已过期 / Subscribe Expired"), nil
 	}
 
-	subDetails, err := l.svc.SubscribeModel.FindOne(l.ctx.Request.Context(), userSub.SubscribeId)
+	if l.isTrafficExhausted(userSub) {
+		return l.createNoticeServers("流量已用尽 / Traffic Exhausted"), nil
+	}
+
+	subDetails, err := l.svc.Store.Subscribe().FindOne(l.ctx, userSub.SubscribeId)
 	if err != nil {
 		l.Errorw("[Generate Subscribe]find subscribe details error: %v", logger.Field("error", err.Error()))
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "find subscribe details error: %v", err.Error())
 	}
 
-	serverIds := tool.StringToInt64Slice(subDetails.Server)
-	groupIds := tool.StringToInt64Slice(subDetails.ServerGroup)
+	nodeIds := tool.StringToInt64Slice(subDetails.Nodes)
+	tags := tool.RemoveStringElement(strings.Split(subDetails.NodeTags, ","), "")
 
-	l.Debugf("[Generate Subscribe]serverIds: %v, groupIds: %v", serverIds, groupIds)
+	l.Debugf("[Generate Subscribe]nodes: %v, NodeTags: %v", len(nodeIds), len(tags))
+	if len(nodeIds) == 0 && len(tags) == 0 {
+		logger.Infow("[Generate Subscribe]no subscribe nodes")
+		return []*node.Node{}, nil
+	}
+	enable := true
+	var nodes []*node.Node
+	_, nodes, err = l.svc.Store.Node().FilterNodeList(l.ctx, &node.FilterNodeParams{
+		Page:    1,
+		Size:    1000,
+		NodeId:  nodeIds,
+		Tag:     tool.RemoveDuplicateElements(tags...),
+		Preload: true,
+		Enabled: &enable, // Only get enabled nodes
+	})
 
-	servers, err := l.svc.ServerModel.FindServerDetailByGroupIdsAndIds(l.ctx.Request.Context(), groupIds, serverIds)
-
-	l.Debugf("[Query Subscribe]found servers: %v", len(servers))
+	l.Debugf("[Query Subscribe]found servers: %v", len(nodes))
 
 	if err != nil {
 		l.Errorw("[Generate Subscribe]find server details error: %v", logger.Field("error", err.Error()))
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "find server details error: %v", err.Error())
 	}
-	logger.Debugf("[Generate Subscribe]found servers: %v", len(servers))
-	return servers, nil
+	logger.Debugf("[Generate Subscribe]found servers: %v", len(nodes))
+	return nodes, nil
 }
 
 func (l *SubscribeLogic) isSubscriptionExpired(userSub *user.Subscribe) bool {
 	return userSub.ExpireTime.Unix() < time.Now().Unix() && userSub.ExpireTime.Unix() != 0
 }
 
-func (l *SubscribeLogic) createExpiredServers() []*server.Server {
+// isTrafficExhausted reports whether the subscription has used up its traffic
+// quota. Traffic == 0 means unlimited. Mirrors the condition used by
+// FindTrafficExceededSubscribes (upload + download >= traffic AND traffic > 0).
+func (l *SubscribeLogic) isTrafficExhausted(userSub *user.Subscribe) bool {
+	return userSub.Traffic > 0 && userSub.Download+userSub.Upload >= userSub.Traffic
+}
+
+// createNoticeServers returns placeholder (non-functional) nodes whose names
+// carry a notice (e.g. expired / traffic exhausted) so clients display the
+// reason instead of silently failing.
+func (l *SubscribeLogic) createNoticeServers(message string) []*node.Node {
 	enable := true
 	host := l.getFirstHostLine()
 
-	return []*server.Server{
+	return []*node.Node{
 		{
-			Name:       "Subscribe Expired",
-			ServerAddr: "127.0.0.1",
-			RelayMode:  "none",
-			Protocol:   "shadowsocks",
-			Config:     "{\"method\":\"aes-256-gcm\",\"port\":1}",
-			Enable:     &enable,
-			Sort:       0,
+			Name:    message,
+			Tags:    "",
+			Port:    18080,
+			Address: "127.0.0.1",
+			Server: &node.Server{
+				Id:        1,
+				Name:      message,
+				Protocols: "[{\"type\":\"shadowsocks\",\"cipher\":\"aes-256-gcm\",\"port\":1}]",
+			},
+			Protocol: "shadowsocks",
+			Enabled:  &enable,
 		},
 		{
-			Name:       host,
-			ServerAddr: "127.0.0.1",
-			RelayMode:  "none",
-			Protocol:   "shadowsocks",
-			Config:     "{\"method\":\"aes-256-gcm\",\"port\":1}",
-			Enable:     &enable,
-			Sort:       0,
+			Name:    host,
+			Tags:    "",
+			Port:    18080,
+			Address: "127.0.0.1",
+			Server: &node.Server{
+				Id:        1,
+				Name:      message,
+				Protocols: "[{\"type\":\"shadowsocks\",\"cipher\":\"aes-256-gcm\",\"port\":1}]",
+			},
+			Protocol: "shadowsocks",
+			Enabled:  &enable,
 		},
 	}
 }
@@ -168,155 +335,4 @@ func (l *SubscribeLogic) getFirstHostLine() string {
 		return lines[0]
 	}
 	return host
-}
-
-func (l *SubscribeLogic) getRules() ([]*server.RuleGroup, error) {
-	rules, err := l.svc.ServerModel.QueryAllRuleGroup(l.ctx)
-	if err != nil {
-		l.Errorw("[Generate Subscribe]find rule group error: %v", logger.Field("error", err.Error()))
-		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "find rule group error: %v", err.Error())
-	}
-	return rules, nil
-}
-
-func (l *SubscribeLogic) buildClientConfig(req *types.SubscribeRequest, userSub *user.Subscribe, servers []*server.Server, rules []*server.RuleGroup) ([]byte, string, error) {
-	tags := make(map[string][]*server.Server)
-
-	serverTags, err := l.svc.ServerModel.FindServerTags(l.ctx)
-	if err != nil {
-		l.Errorw("[Generate Subscribe]find server tags error: %v", logger.Field("error", err.Error()))
-		return nil, "", errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "find server tags error: %v", err.Error())
-	}
-	// Deduplicate tags
-	serverTags = tool.RemoveDuplicateElements(serverTags...)
-	for _, tag := range serverTags {
-		s, err := l.svc.ServerModel.FindServersByTag(l.ctx.Request.Context(), tag)
-		if err != nil {
-			l.Errorw("[Generate Subscribe]find servers by tag error: %v", logger.Field("error", err.Error()))
-			continue
-		}
-		if len(s) > 0 {
-			tags[tag] = s
-		}
-	}
-
-	proxyManager := adapter.NewAdapter(&adapter.Config{
-		Nodes: servers,
-		Rules: rules,
-		Tags:  tags,
-	})
-	clientType := l.getClientType(req)
-	var resp []byte
-
-	l.Logger.Info(fmt.Sprintf("[Generate Subscribe] %s", clientType), logger.Field("ua", req.UA), logger.Field("flag", req.Flag))
-
-	switch clientType {
-	case "clash":
-		resp, err = proxyManager.BuildClash(userSub.UUID)
-		if err != nil {
-			l.Errorw("[Generate Subscribe] build clash error", logger.Field("error", err.Error()))
-			return nil, "", errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "build clash error: %v", err.Error())
-		}
-		l.setClashHeaders()
-	case "sing-box":
-		resp, err = proxyManager.BuildSingbox(userSub.UUID)
-		if err != nil {
-			l.Errorw("[Generate Subscribe] build sing-box error", logger.Field("error", err.Error()))
-			return nil, "", errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "build sing-box error: %v", err.Error())
-		}
-	case "quantumult":
-		resp = []byte(proxyManager.BuildQuantumultX(userSub.UUID))
-	case "shadowrocket":
-		resp = proxyManager.BuildShadowrocket(userSub.UUID, shadowrocket.UserInfo{
-			Upload:       userSub.Upload,
-			Download:     userSub.Download,
-			TotalTraffic: userSub.Traffic,
-			ExpiredDate:  userSub.ExpireTime,
-		})
-	case "loon":
-		resp = proxyManager.BuildLoon(userSub.UUID)
-	case "surfboard":
-		subsURL := l.getSubscribeURL(userSub.Token)
-		resp = proxyManager.BuildSurfboard(l.svc.Config.Site.SiteName, surfboard.UserInfo{
-			Upload:       userSub.Upload,
-			Download:     userSub.Download,
-			TotalTraffic: userSub.Traffic,
-			ExpiredDate:  userSub.ExpireTime,
-			UUID:         userSub.UUID,
-			SubscribeURL: subsURL,
-		})
-		l.setSurfboardHeaders()
-	case "v2rayn":
-		resp = proxyManager.BuildV2rayN(userSub.UUID)
-
-	default:
-		resp = proxyManager.BuildGeneral(userSub.UUID)
-	}
-
-	headerInfo := fmt.Sprintf("upload=%d;download=%d;total=%d;expire=%d",
-		userSub.Upload, userSub.Download, userSub.Traffic, userSub.ExpireTime.Unix())
-
-	return resp, headerInfo, nil
-}
-
-func (l *SubscribeLogic) setClashHeaders() {
-	l.ctx.Header("content-disposition", fmt.Sprintf("attachment;filename*=UTF-8''%s", url.QueryEscape(l.svc.Config.Site.SiteName)))
-	l.ctx.Header("Profile-Update-Interval", "24")
-	l.ctx.Header("Content-Type", "application/octet-stream; charset=UTF-8")
-}
-
-func (l *SubscribeLogic) setSurfboardHeaders() {
-	l.ctx.Header("content-disposition", fmt.Sprintf("attachment;filename*=UTF-8''%s.conf", url.QueryEscape(l.svc.Config.Site.SiteName)))
-	l.ctx.Header("Content-Type", "application/octet-stream; charset=UTF-8")
-}
-
-func (l *SubscribeLogic) getSubscribeURL(token string) string {
-	if l.svc.Config.Subscribe.PanDomain {
-		return fmt.Sprintf("https://%s", l.ctx.Request.Host)
-	}
-
-	if l.svc.Config.Subscribe.SubscribeDomain != "" {
-		domains := strings.Split(l.svc.Config.Subscribe.SubscribeDomain, "\n")
-		return fmt.Sprintf("https://%s%s?token=%s&flag=surfboard", domains[0], l.svc.Config.Subscribe.SubscribePath, token)
-	}
-
-	return fmt.Sprintf("https://%s%s?token=%s&flag=surfboard", l.ctx.Request.Host, l.svc.Config.Subscribe.SubscribePath, token)
-}
-
-func (l *SubscribeLogic) getClientType(req *types.SubscribeRequest) string {
-	clientTypeMap := map[string]string{
-		"clash":        "clash",
-		"meta":         "clash",
-		"sing-box":     "sing-box",
-		"hiddify":      "sing-box",
-		"surge":        "surge",
-		"quantumult":   "quantumult",
-		"shadowrocket": "shadowrocket",
-		"loon":         "loon",
-		"surfboard":    "surfboard",
-		"v2rayn":       "v2rayn",
-	}
-
-	findClient := func(s string) string {
-		s = strings.ToLower(strings.TrimSpace(s))
-		if s == "" {
-			return ""
-		}
-
-		for key, clientType := range clientTypeMap {
-			if strings.Contains(s, key) {
-				return clientType
-			}
-		}
-
-		return ""
-	}
-
-	// 优先检查Flag参数
-	if typ := findClient(req.Flag); typ != "" {
-		return typ
-	}
-
-	// 其次检查UA参数
-	return findClient(req.UA)
 }

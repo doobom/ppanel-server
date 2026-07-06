@@ -25,16 +25,8 @@ type (
 		Total int64           `json:"total"`
 	}
 	QueryUserBalanceLogListResponse {
-		List  []UserBalanceLog `json:"list"`
-		Total int64            `json:"total"`
-	}
-
-	CommissionLog {
-		Id        int64  `json:"id"`
-		UserId    int64  `json:"user_id"`
-		OrderNo   string `json:"order_no"`
-		Amount    int64  `json:"amount"`
-		CreatedAt int64  `json:"created_at"`
+		List  []BalanceLog `json:"list"`
+		Total int64        `json:"total"`
 	}
 	QueryUserCommissionLogListRequest {
 		Page int `form:"page"`
@@ -74,50 +66,76 @@ type (
 	UnbindOAuthRequest {
 		Method string `json:"method"`
 	}
-	ResetUserSubscribeTokenRequest {
-		UserSubscribeId int64 `json:"user_subscribe_id"`
-	}
-
 	GetLoginLogRequest {
 		Page int `form:"page"`
 		Size int `form:"size"`
 	}
-
 	GetLoginLogResponse {
 		List  []UserLoginLog `json:"list"`
 		Total int64          `json:"total"`
 	}
-
 	GetSubscribeLogRequest {
 		Page int `form:"page"`
 		Size int `form:"size"`
 	}
-
 	GetSubscribeLogResponse {
 		List  []UserSubscribeLog `json:"list"`
 		Total int64              `json:"total"`
 	}
-
 	UpdateBindMobileRequest {
 		AreaCode string `json:"area_code" validate:"required"`
 		Mobile   string `json:"mobile" validate:"required"`
 		Code     string `json:"code" validate:"required"`
 	}
-
 	UpdateBindEmailRequest {
 		Email string `json:"email" validate:"required"`
 	}
-
 	VerifyEmailRequest {
 		Email string `json:"email" validate:"required"`
 		Code  string `json:"code" validate:"required"`
+	}
+	GetDeviceListResponse {
+		List  []UserDevice `json:"list"`
+		Total int64        `json:"total"`
+	}
+	UnbindDeviceRequest {
+		Id int64 `json:"id" validate:"required"`
+	}
+	UpdateUserSubscribeNoteRequest {
+		UserSubscribeId int64  `json:"user_subscribe_id" validate:"required"`
+		Note            string `json:"note" validate:"max=500"`
+	}
+	UpdateUserRulesRequest {
+		Rules []string `json:"rules" validate:"required"`
+	}
+	CommissionWithdrawRequest {
+		Amount  int64  `json:"amount"`
+		Content string `json:"content"`
+	}
+	WithdrawalLog {
+		Id        int64  `json:"id"`
+		UserId    int64  `json:"user_id"`
+		Amount    int64  `json:"amount"`
+		Content   string `json:"content"`
+		Status    uint8  `json:"status"`
+		Reason    string `json:"reason,omitempty"`
+		CreatedAt int64  `json:"created_at"`
+		UpdatedAt int64  `json:"updated_at"`
+	}
+	QueryWithdrawalLogListRequest {
+		Page int `form:"page"`
+		Size int `form:"size"`
+	}
+	QueryWithdrawalLogListResponse {
+		List  []WithdrawalLog `json:"list"`
+		Total int64           `json:"total"`
 	}
 )
 
 @server (
 	prefix:     v1/public/user
 	group:      public/user
-	middleware: AuthMiddleware
+	middleware: AuthMiddleware,DeviceMiddleware
 )
 service ppanel {
 	@doc "Query User Info"
@@ -207,4 +225,29 @@ service ppanel {
 	@doc "Update Bind Email"
 	@handler UpdateBindEmail
 	put /bind_email (UpdateBindEmailRequest)
+
+	@doc "Get Device List"
+	@handler GetDeviceList
+	get /devices returns (GetDeviceListResponse)
+
+	@doc "Unbind Device"
+	@handler UnbindDevice
+	put /unbind_device (UnbindDeviceRequest)
+
+	@doc "Update User Subscribe Note"
+	@handler UpdateUserSubscribeNote
+	put /subscribe_note (UpdateUserSubscribeNoteRequest)
+
+	@doc "Update User Rules"
+	@handler UpdateUserRules
+	put /rules (UpdateUserRulesRequest)
+
+	@doc "Commission Withdraw"
+	@handler CommissionWithdraw
+	post /commission_withdraw (CommissionWithdrawRequest) returns (WithdrawalLog)
+
+	@doc "Query Withdrawal Log"
+	@handler QueryWithdrawalLog
+	get /withdrawal_log (QueryWithdrawalLogListRequest) returns (QueryWithdrawalLogListResponse)
 }
+

@@ -4,64 +4,76 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/plugin/soft_delete"
+	"gorm.io/gorm/clause"
 )
 
 type User struct {
-	Id                    int64         `gorm:"primaryKey"`
-	Password              string        `gorm:"type:varchar(100);not null;comment:User Password"`
-	Avatar                string        `gorm:"type:MEDIUMTEXT;comment:User Avatar"`
-	Balance               int64         `gorm:"default:0;comment:User Balance"` // User Balance Amount
-	ReferCode             string        `gorm:"type:varchar(20);default:'';comment:Referral Code"`
-	RefererId             int64         `gorm:"index:idx_referer;comment:Referrer ID"`
-	Commission            int64         `gorm:"default:0;comment:Commission"` // Commission Amount
-	GiftAmount            int64         `gorm:"default:0;comment:User Gift Amount"`
-	Enable                *bool         `gorm:"default:true;not null;comment:Is Account Enabled"`
-	IsAdmin               *bool         `gorm:"default:false;not null;comment:Is Admin"`
-	EnableBalanceNotify   *bool         `gorm:"default:false;not null;comment:Enable Balance Change Notifications"`
-	EnableLoginNotify     *bool         `gorm:"default:false;not null;comment:Enable Login Notifications"`
-	EnableSubscribeNotify *bool         `gorm:"default:false;not null;comment:Enable Subscription Notifications"`
-	EnableTradeNotify     *bool         `gorm:"default:false;not null;comment:Enable Trade Notifications"`
-	AuthMethods           []AuthMethods `gorm:"foreignKey:UserId;references:Id"`
-	UserDevices           []Device      `gorm:"foreignKey:UserId;references:Id"`
-	CreatedAt             time.Time     `gorm:"<-:create;comment:Creation Time"`
-	UpdatedAt             time.Time     `gorm:"comment:Update Time"`
+	Id                    int64          `gorm:"primaryKey"`
+	Password              string         `gorm:"type:varchar(100);not null;comment:User Password"`
+	Algo                  string         `gorm:"type:varchar(20);default:'default';comment:Encryption Algorithm"`
+	Salt                  string         `gorm:"type:varchar(20);default:null;comment:Password Salt"`
+	Avatar                string         `gorm:"type:MEDIUMTEXT;comment:User Avatar"`
+	Balance               int64          `gorm:"default:0;comment:User Balance"` // User Balance Amount
+	ReferCode             string         `gorm:"type:varchar(20);default:'';comment:Referral Code"`
+	RefererId             int64          `gorm:"index:idx_referer;comment:Referrer ID"`
+	Commission            int64          `gorm:"default:0;comment:Commission"`                      // Commission Amount
+	ReferralPercentage    uint8          `gorm:"default:0;comment:Referral"`                        // Referral Percentage
+	OnlyFirstPurchase     *bool          `gorm:"default:true;not null;comment:Only First Purchase"` // Only First Purchase Referral
+	GiftAmount            int64          `gorm:"default:0;comment:User Gift Amount"`
+	Enable                *bool          `gorm:"default:true;not null;comment:Is Account Enabled"`
+	IsAdmin               *bool          `gorm:"default:false;not null;comment:Is Admin"`
+	EnableBalanceNotify   *bool          `gorm:"default:false;not null;comment:Enable Balance Change Notifications"`
+	EnableLoginNotify     *bool          `gorm:"default:false;not null;comment:Enable Login Notifications"`
+	EnableSubscribeNotify *bool          `gorm:"default:false;not null;comment:Enable Subscription Notifications"`
+	EnableTradeNotify     *bool          `gorm:"default:false;not null;comment:Enable Trade Notifications"`
+	AuthMethods           []AuthMethods  `gorm:"foreignKey:UserId;references:Id"`
+	UserDevices           []Device       `gorm:"foreignKey:UserId;references:Id"`
+	Rules                 string         `gorm:"type:TEXT;comment:User Rules"`
+	CreatedAt             time.Time      `gorm:"<-:create;comment:Creation Time"`
+	UpdatedAt             time.Time      `gorm:"comment:Update Time"`
+	DeletedAt             gorm.DeletedAt `gorm:"index;comment:Deletion Time"`
 }
 
-func (User) TableName() string {
+func (*User) TableName() string {
 	return "user"
 }
 
-type OldUser struct {
-	Id    int64  `gorm:"primaryKey"`
-	Email string `gorm:"index:idx_email;type:varchar(100);comment:Email"`
-	//Telephone             string                `gorm:"index:idx_telephone;type:varchar(20);default:'';comment:Telephone"`
-	//TelephoneAreaCode     string                `gorm:"index:idx_telephone;type:varchar(20);default:'';comment:TelephoneAreaCode"`
-	Password              string                `gorm:"type:varchar(100);not null;comment:User Password"`
-	Avatar                string                `gorm:"type:varchar(200);default:'';comment:User Avatar"`
-	Balance               int64                 `gorm:"default:0;comment:User Balance"` // User Balance Amount
-	Telegram              int64                 `gorm:"default:null;comment:Telegram Account"`
-	ReferCode             string                `gorm:"type:varchar(20);default:'';comment:Referral Code"`
-	RefererId             int64                 `gorm:"index:idx_referer;comment:Referrer ID"`
-	Commission            int64                 `gorm:"default:0;comment:Commission"` // Commission Amount
-	GiftAmount            int64                 `gorm:"default:0;comment:User Gift Amount"`
-	Enable                *bool                 `gorm:"default:true;not null;comment:Is Account Enabled"`
-	IsAdmin               *bool                 `gorm:"default:false;not null;comment:Is Admin"`
-	ValidEmail            *bool                 `gorm:"default:false;not null;comment:Is Email Verified"`
-	EnableEmailNotify     *bool                 `gorm:"default:false;not null;comment:Enable Email Notifications"`
-	EnableTelegramNotify  *bool                 `gorm:"default:false;not null;comment:Enable Telegram Notifications"`
-	EnableBalanceNotify   *bool                 `gorm:"default:false;not null;comment:Enable Balance Change Notifications"`
-	EnableLoginNotify     *bool                 `gorm:"default:false;not null;comment:Enable Login Notifications"`
-	EnableSubscribeNotify *bool                 `gorm:"default:false;not null;comment:Enable Subscription Notifications"`
-	EnableTradeNotify     *bool                 `gorm:"default:false;not null;comment:Enable Trade Notifications"`
-	CreatedAt             time.Time             `gorm:"<-:create;comment:Creation Time"`
-	UpdatedAt             time.Time             `gorm:"comment:Update Time"`
-	DeletedAt             gorm.DeletedAt        `gorm:"default:null;comment:Deletion Time"`
-	IsDel                 soft_delete.DeletedAt `gorm:"softDelete:flag,DeletedAtField:DeletedAt;comment:1: Normal 0: Deleted"` // Using `1` and `0` to indicate
+func UserTableName(db *gorm.DB) string {
+	return quoteTable(db, "user")
 }
 
-func (OldUser) TableName() string {
-	return "user"
+func UserColumn(db *gorm.DB, column string) string {
+	return quoteColumn(db, "user", column)
+}
+
+func AuthMethodsTableName(db *gorm.DB) string {
+	return quoteTable(db, "user_auth_methods")
+}
+
+func AuthMethodsColumn(db *gorm.DB, column string) string {
+	return quoteColumn(db, "user_auth_methods", column)
+}
+
+func UserSubscribeTableName(db *gorm.DB) string {
+	return quoteTable(db, "user_subscribe")
+}
+
+func UserSubscribeColumn(db *gorm.DB, column string) string {
+	return quoteColumn(db, "user_subscribe", column)
+}
+
+func quoteTable(db *gorm.DB, table string) string {
+	if db != nil && db.Statement != nil {
+		return db.Statement.Quote(clause.Table{Name: table})
+	}
+	return table
+}
+
+func quoteColumn(db *gorm.DB, table, column string) string {
+	if db != nil && db.Statement != nil {
+		return db.Statement.Quote(clause.Column{Table: table, Name: column})
+	}
+	return table + "." + column
 }
 
 type Subscribe struct {
@@ -78,55 +90,14 @@ type Subscribe struct {
 	Upload      int64      `gorm:"default:0;comment:Upload Traffic"`
 	Token       string     `gorm:"index:idx_token;unique;type:varchar(255);default:'';comment:Token"`
 	UUID        string     `gorm:"type:varchar(255);unique;index:idx_uuid;default:'';comment:UUID"`
-	Status      uint8      `gorm:"type:tinyint(1);default:0;comment:Subscription Status: 0: Pending 1: Active 2: Finished 3: Expired 4: Deducted"`
+	Status      uint8      `gorm:"type:tinyint(1);default:0;comment:Subscription Status: 0: Pending 1: Active 2: Finished 3: Expired 4: Deducted 5: stopped"`
+	Note        string     `gorm:"type:varchar(500);default:'';comment:User note for subscription"`
 	CreatedAt   time.Time  `gorm:"<-:create;comment:Creation Time"`
 	UpdatedAt   time.Time  `gorm:"comment:Update Time"`
 }
 
-func (Subscribe) TableName() string {
+func (*Subscribe) TableName() string {
 	return "user_subscribe"
-}
-
-type BalanceLog struct {
-	Id        int64     `gorm:"primaryKey"`
-	UserId    int64     `gorm:"index:idx_user_id;not null;comment:User ID"`
-	Amount    int64     `gorm:"not null;comment:Amount"`
-	Type      uint8     `gorm:"type:tinyint(1);not null;comment:Type: 1: Recharge 2: Withdraw 3: Payment 4: Refund 5: Reward"`
-	OrderId   int64     `gorm:"default:null;comment:Order ID"`
-	Balance   int64     `gorm:"not null;comment:Balance"`
-	CreatedAt time.Time `gorm:"<-:create;comment:Creation Time"`
-}
-
-func (BalanceLog) TableName() string {
-	return "user_balance_log"
-}
-
-type GiftAmountLog struct {
-	Id              int64     `gorm:"primaryKey"`
-	UserId          int64     `gorm:"index:idx_user_id;not null;comment:User ID"`
-	UserSubscribeId int64     `gorm:"default:null;comment:Deduction User Subscribe ID"`
-	OrderNo         string    `gorm:"default:null;comment:Order No."`
-	Type            uint8     `gorm:"type:tinyint(1);not null;comment:Type: 1: Increase 2: Reduce"`
-	Amount          int64     `gorm:"not null;comment:Amount"`
-	Balance         int64     `gorm:"not null;comment:Balance"`
-	Remark          string    `gorm:"type:varchar(255);default:'';comment:Remark"`
-	CreatedAt       time.Time `gorm:"<-:create;comment:Creation Time"`
-}
-
-func (GiftAmountLog) TableName() string {
-	return "user_gift_amount_log"
-}
-
-type CommissionLog struct {
-	Id        int64     `gorm:"primaryKey"`
-	UserId    int64     `gorm:"index:idx_user_id;not null;comment:User ID"`
-	OrderNo   string    `gorm:"default:null;comment:Order No."`
-	Amount    int64     `gorm:"not null;comment:Amount"`
-	CreatedAt time.Time `gorm:"<-:create;comment:Creation Time"`
-}
-
-func (CommissionLog) TableName() string {
-	return "user_commission_log"
 }
 
 type AuthMethods struct {
@@ -139,7 +110,7 @@ type AuthMethods struct {
 	UpdatedAt      time.Time `gorm:"comment:Update Time"`
 }
 
-func (AuthMethods) TableName() string {
+func (*AuthMethods) TableName() string {
 	return "user_auth_methods"
 }
 
@@ -155,7 +126,7 @@ type Device struct {
 	UpdatedAt  time.Time `gorm:"comment:Update Time"`
 }
 
-func (Device) TableName() string {
+func (*Device) TableName() string {
 	return "user_device"
 }
 
@@ -174,57 +145,17 @@ func (DeviceOnlineRecord) TableName() string {
 	return "user_device_online_record"
 }
 
-type LoginLog struct {
+type Withdrawal struct {
 	Id        int64     `gorm:"primaryKey"`
 	UserId    int64     `gorm:"index:idx_user_id;not null;comment:User ID"`
-	LoginIP   string    `gorm:"type:varchar(255);not null;comment:Login IP"`
-	UserAgent string    `gorm:"type:text;not null;comment:UserAgent"`
-	Success   *bool     `gorm:"default:false;not null;comment:Login Success"`
+	Amount    int64     `gorm:"not null;comment:Withdrawal Amount"`
+	Content   string    `gorm:"type:text;comment:Withdrawal Content"`
+	Status    uint8     `gorm:"type:tinyint(1);default:0;comment:Withdrawal Status: 0: Pending 1: Approved 2: Rejected"`
+	Reason    string    `gorm:"type:varchar(500);default:'';comment:Rejection Reason"`
 	CreatedAt time.Time `gorm:"<-:create;comment:Creation Time"`
+	UpdatedAt time.Time `gorm:"comment:Update Time"`
 }
 
-func (LoginLog) TableName() string {
-	return "user_login_log"
-}
-
-type SubscribeLog struct {
-	Id              int64     `gorm:"primaryKey"`
-	UserId          int64     `gorm:"index:idx_user_id;not null;comment:User ID"`
-	UserSubscribeId int64     `gorm:"index:idx_user_subscribe_id;not null;comment:User Subscribe ID"`
-	Token           string    `gorm:"type:varchar(255);not null;comment:Token"`
-	IP              string    `gorm:"type:varchar(255);not null;comment:IP"`
-	UserAgent       string    `gorm:"type:text;not null;comment:UserAgent"`
-	CreatedAt       time.Time `gorm:"<-:create;comment:Creation Time"`
-}
-
-func (SubscribeLog) TableName() string {
-	return "user_subscribe_log"
-}
-
-const (
-	ResetSubscribeTypeAuto    uint8 = 1
-	ResetSubscribeTypeAdvance uint8 = 2
-	ResetSubscribeTypePaid    uint8 = 3
-)
-
-type FilterResetSubscribeLogParams struct {
-	Page            int
-	Size            int
-	Type            uint8
-	UserId          int64
-	OrderNo         string
-	UserSubscribeId int64
-}
-
-type ResetSubscribeLog struct {
-	Id              int64     `gorm:"primaryKey"`
-	UserId          int64     `gorm:"type:bigint;index:idx_user_id;not null;comment:User ID"`
-	Type            uint8     `gorm:"type:tinyint(1);not null;comment:Type: 1: Auto 2: Advance 3: Paid"`
-	OrderNo         string    `gorm:"type:varchar(255);default:null;comment:Order No."`
-	UserSubscribeId int64     `gorm:"type:bigint;index:idx_user_subscribe_id;not null;comment:User Subscribe ID"`
-	CreatedAt       time.Time `gorm:"<-:create;comment:Creation Time"`
-}
-
-func (ResetSubscribeLog) TableName() string {
-	return "user_reset_subscribe_log"
+func (*Withdrawal) TableName() string {
+	return "user_withdrawal"
 }

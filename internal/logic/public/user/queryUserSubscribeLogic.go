@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/perfect-panel/server/pkg/constant"
@@ -36,7 +37,7 @@ func (l *QueryUserSubscribeLogic) QueryUserSubscribe() (resp *types.QueryUserSub
 		logger.Error("current user is not found in context")
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.InvalidAccess), "Invalid Access")
 	}
-	data, err := l.svcCtx.UserModel.QueryUserSubscribe(l.ctx, u.Id, 0, 1, 2, 3)
+	data, err := l.svcCtx.Store.User().QueryUserSubscribe(l.ctx, u.Id, 0, 1, 2, 3)
 	if err != nil {
 		l.Errorw("[QueryUserSubscribeLogic] Query User Subscribe Error:", logger.Field("err", err.Error()))
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "Query User Subscribe Error")
@@ -50,6 +51,17 @@ func (l *QueryUserSubscribeLogic) QueryUserSubscribe() (resp *types.QueryUserSub
 	for _, item := range data {
 		var sub types.UserSubscribe
 		tool.DeepCopy(&sub, item)
+
+		// 解析Discount字段 避免在续订时只能续订一个月
+		if item.Subscribe != nil && item.Subscribe.Discount != "" {
+			var discounts []types.SubscribeDiscount
+			if err := json.Unmarshal([]byte(item.Subscribe.Discount), &discounts); err == nil {
+				sub.Subscribe.Discount = discounts
+			}
+		}
+
+		short, _ := tool.FixedUniqueString(item.Token, 8, "")
+		sub.Short = short
 		sub.ResetTime = calculateNextResetTime(&sub)
 		resp.List = append(resp.List, sub)
 	}
@@ -58,26 +70,47 @@ func (l *QueryUserSubscribeLogic) QueryUserSubscribe() (resp *types.QueryUserSub
 
 // 计算下次重置时间
 func calculateNextResetTime(sub *types.UserSubscribe) int64 {
-	startTime := time.UnixMilli(sub.StartTime)
 	now := time.Now()
+	return calculateNextResetTimeAt(sub, now)
+}
+
+func calculateNextResetTimeAt(sub *types.UserSubscribe, now time.Time) int64 {
 	switch sub.Subscribe.ResetCycle {
 	case 0:
 		return 0
 	case 1:
 		return time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, now.Location()).UnixMilli()
 	case 2:
-		if startTime.Day() > now.Day() {
-			return time.Date(now.Year(), now.Month(), startTime.Day(), 0, 0, 0, 0, now.Location()).UnixMilli()
-		} else {
-			return time.Date(now.Year(), now.Month()+1, startTime.Day(), 0, 0, 0, 0, now.Location()).UnixMilli()
+		startTime := resetBaseTime(sub)
+		target := validResetDate(now.Year(), now.Month(), startTime.Day(), now.Location())
+		if !target.After(now) {
+			target = validResetDate(now.Year(), now.Month()+1, startTime.Day(), now.Location())
 		}
+		return target.UnixMilli()
 	case 3:
-		targetTime := time.Date(now.Year(), startTime.Month(), startTime.Day(), 0, 0, 0, 0, now.Location())
-		if targetTime.Before(now) {
-			targetTime = time.Date(now.Year()+1, startTime.Month(), startTime.Day(), 0, 0, 0, 0, now.Location())
+		startTime := resetBaseTime(sub)
+		targetTime := validResetDate(now.Year(), startTime.Month(), startTime.Day(), now.Location())
+		if !targetTime.After(now) {
+			targetTime = validResetDate(now.Year()+1, startTime.Month(), startTime.Day(), now.Location())
 		}
 		return targetTime.UnixMilli()
 	default:
 		return 0
 	}
+}
+
+func resetBaseTime(sub *types.UserSubscribe) time.Time {
+	if sub.StartTime > 0 {
+		return time.UnixMilli(sub.StartTime)
+	}
+	return time.UnixMilli(sub.ExpireTime)
+}
+
+func validResetDate(year int, month time.Month, day int, loc *time.Location) time.Time {
+	firstOfMonth := time.Date(year, month, 1, 0, 0, 0, 0, loc)
+	lastDay := firstOfMonth.AddDate(0, 1, -1).Day()
+	if day > lastDay {
+		day = lastDay
+	}
+	return time.Date(year, month, day, 0, 0, 0, 0, loc)
 }

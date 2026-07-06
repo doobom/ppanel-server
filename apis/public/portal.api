@@ -25,6 +25,9 @@ type (
 	PortalPurchaseResponse {
 		OrderNo string `json:"order_no"`
 	}
+	GetSubscriptionRequest {
+		Language string `form:"language"`
+	}
 	GetSubscriptionResponse {
 		List []Subscribe `json:"list"`
 	}
@@ -65,8 +68,9 @@ type (
 )
 
 @server (
-	prefix: v1/public/portal
-	group:  public/portal
+	prefix:     v1/public/portal
+	group:      public/portal
+	middleware: DeviceMiddleware
 )
 service ppanel {
 	@doc "Get available payment methods"
@@ -75,7 +79,7 @@ service ppanel {
 
 	@doc "Get Subscription"
 	@handler GetSubscription
-	get /subscribe returns (GetSubscriptionResponse)
+	get /subscribe (GetSubscriptionRequest) returns (GetSubscriptionResponse)
 
 	@doc "Pre Purchase Order"
 	@handler PrePurchaseOrder
@@ -93,3 +97,4 @@ service ppanel {
 	@handler PurchaseCheckout
 	post /order/checkout (CheckoutOrderRequest) returns (CheckoutOrderResponse)
 }
+

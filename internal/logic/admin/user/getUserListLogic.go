@@ -27,11 +27,13 @@ func NewGetUserListLogic(ctx context.Context, svcCtx *svc.ServiceContext) *GetUs
 	}
 }
 func (l *GetUserListLogic) GetUserList(req *types.GetUserListRequest) (*types.GetUserListResponse, error) {
-	list, total, err := l.svcCtx.UserModel.QueryPageList(l.ctx, req.Page, req.Size, &user.UserFilterParams{
+	list, total, err := l.svcCtx.Store.User().QueryPageList(l.ctx, req.Page, req.Size, &user.UserFilterParams{
 		UserId:          req.UserId,
 		Search:          req.Search,
+		Unscoped:        req.Unscoped,
 		SubscribeId:     req.SubscribeId,
 		UserSubscribeId: req.UserSubscribeId,
+		Order:           "DESC",
 	})
 	if err != nil {
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "GetUserListLogic failed: %v", err.Error())
@@ -40,20 +42,20 @@ func (l *GetUserListLogic) GetUserList(req *types.GetUserListRequest) (*types.Ge
 	userRespList := make([]types.User, 0, len(list))
 
 	for _, item := range list {
-		var user types.User
-		tool.DeepCopy(&user, item)
+		var u types.User
+		tool.DeepCopy(&u, item)
 
 		// 处理 AuthMethods
-		authMethods := make([]types.UserAuthMethod, len(user.AuthMethods)) // 直接创建目标 slice
-		for i, method := range user.AuthMethods {
+		authMethods := make([]types.UserAuthMethod, len(u.AuthMethods)) // 直接创建目标 slice
+		for i, method := range u.AuthMethods {
 			tool.DeepCopy(&authMethods[i], method)
 			if method.AuthType == "mobile" {
 				authMethods[i].AuthIdentifier = phone.FormatToInternational(method.AuthIdentifier)
 			}
 		}
-		user.AuthMethods = authMethods
+		u.AuthMethods = authMethods
 
-		userRespList = append(userRespList, user)
+		userRespList = append(userRespList, u)
 	}
 
 	return &types.GetUserListResponse{

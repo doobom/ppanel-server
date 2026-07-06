@@ -3,9 +3,9 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/perfect-panel/server/internal/model/cache"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/logger"
@@ -32,7 +32,7 @@ func NewServerPushUserTrafficLogic(ctx context.Context, svcCtx *svc.ServiceConte
 
 func (l *ServerPushUserTrafficLogic) ServerPushUserTraffic(req *types.ServerPushUserTrafficRequest) error {
 	// Find server info
-	serverInfo, err := l.svcCtx.ServerModel.FindOne(l.ctx, req.ServerId)
+	serverInfo, err := l.svcCtx.Store.Node().FindOneServer(l.ctx, req.ServerId)
 	if err != nil {
 		l.Errorw("[PushOnlineUsers] FindOne error", logger.Field("error", err))
 		return errors.New("server not found")
@@ -40,23 +40,10 @@ func (l *ServerPushUserTrafficLogic) ServerPushUserTraffic(req *types.ServerPush
 
 	// Create traffic task
 	var request task.TrafficStatistics
-	var userTraffic []cache.UserTraffic
 	request.ServerId = serverInfo.Id
+	request.Protocol = req.Protocol
 	tool.DeepCopy(&request.Logs, req.Traffic)
-	tool.DeepCopy(&userTraffic, req.Traffic)
 
-	// update today traffic rank
-	err = l.svcCtx.NodeCache.AddNodeTodayTraffic(l.ctx, serverInfo.Id, userTraffic)
-	if err != nil {
-		l.Errorw("[ServerPushUserTraffic] AddNodeTodayTraffic error", logger.Field("error", err))
-		return errors.New("add node today traffic error")
-	}
-	for _, user := range req.Traffic {
-		if err = l.svcCtx.NodeCache.AddUserTodayTraffic(l.ctx, user.SID, user.Upload, user.Download); err != nil {
-			l.Errorw("[ServerPushUserTraffic] AddUserTodayTraffic error", logger.Field("error", err))
-			continue
-		}
-	}
 	// Push traffic task
 	val, _ := json.Marshal(request)
 	t := asynq.NewTask(task.ForthwithTrafficStatistics, val, asynq.MaxRetry(3))
@@ -64,7 +51,17 @@ func (l *ServerPushUserTrafficLogic) ServerPushUserTraffic(req *types.ServerPush
 	if err != nil {
 		l.Errorw("[ServerPushUserTraffic] Push traffic task error", logger.Field("error", err.Error()), logger.Field("task", t))
 	} else {
-		l.Infow("[ServerPushUserTraffic] Push traffic task success", logger.Field("task", t), logger.Field("info", info))
+		l.Infow("[ServerPushUserTraffic] Push traffic task success", logger.Field("task", t.Type()), logger.Field("info", string(info.Payload)))
+	}
+
+	// Update server last reported time
+	now := time.Now()
+	serverInfo.LastReportedAt = &now
+
+	err = l.svcCtx.Store.Node().UpdateServer(l.ctx, serverInfo)
+	if err != nil {
+		l.Errorw("[ServerPushUserTraffic] UpdateServer error", logger.Field("error", err))
+		return nil
 	}
 	return nil
 }

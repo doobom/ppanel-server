@@ -3,7 +3,6 @@ package initialize
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/perfect-panel/server/pkg/logger"
 
@@ -15,15 +14,13 @@ import (
 
 func Mobile(ctx *svc.ServiceContext) {
 	logger.Debug("Mobile config initialization")
-	method, err := ctx.AuthModel.FindOneByMethod(context.Background(), "mobile")
+	method, err := ctx.Store.Auth().FindOneByMethod(context.Background(), "mobile")
 	if err != nil {
 		panic(err)
 	}
 	var cfg config.MobileConfig
 	var mobileConfig auth.MobileAuthConfig
-	if err := mobileConfig.Unmarshal(method.Config); err != nil {
-		panic(fmt.Sprintf("failed to unmarshal mobile auth config: %v", err.Error()))
-	}
+	mobileConfig.Unmarshal(method.Config)
 	tool.DeepCopy(&cfg, mobileConfig)
 	cfg.Enable = *method.Enabled
 	value, _ := json.Marshal(mobileConfig.PlatformConfig)

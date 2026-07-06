@@ -1,6 +1,6 @@
 syntax = "v1"
 
-info(
+info (
 	title:   "Document API"
 	desc:    "API for ppanel"
 	author:  "Tension"
@@ -13,9 +13,8 @@ import "../types.api"
 @server (
 	prefix:     v1/public/document
 	group:      public/document
-	middleware: AuthMiddleware
+	middleware: AuthMiddleware,DeviceMiddleware
 )
-
 service ppanel {
 	@doc "Get document list"
 	@handler QueryDocumentList
@@ -25,3 +24,4 @@ service ppanel {
 	@handler QueryDocumentDetail
 	get /detail (QueryDocumentDetailRequest) returns (Document)
 }
+

@@ -12,9 +12,6 @@ const SiteConfigKey = "system:site_config"
 // SubscribeConfigKey Subscribe Config Key
 const SubscribeConfigKey = "system:subscribe_config"
 
-// ApplicationKey Application Key
-const ApplicationKey = "system:application"
-
 // RegisterConfigKey Register Config Key
 const RegisterConfigKey = "system:register_config"
 
@@ -32,6 +29,9 @@ const InviteConfigKey = "system:invite_config"
 
 // TelegramConfigKey Telegram Config Key
 const TelegramConfigKey = "system:telegram_config"
+
+// AdminTelegramChatIdsKey cached admin Telegram chat ID list (not system config)
+const AdminTelegramChatIdsKey = "system:telegram_admin_chat_ids"
 
 // TosConfigKey Tos配置
 const TosConfigKey = "system:tos_config"
@@ -51,25 +51,11 @@ const AuthCodeCacheKey = "auth:verify:email"
 // AuthCodeTelephoneCacheKey Register Code Cache Key
 const AuthCodeTelephoneCacheKey = "auth:verify:telephone"
 
-// ServerUserListCacheKey Server User List Cache Key
-const ServerUserListCacheKey = "server:user_list:id:"
-
-// ServerConfigCacheKey Server Config Cache Key
-const ServerConfigCacheKey = "server:config:id:"
-
-// CommonStat Cache Key
+// CommonStatCacheKey CommonStat Cache Key
 const CommonStatCacheKey = "common:stat"
-
-// ServerStatusCacheKey Server Status Cache Key
-const ServerStatusCacheKey = "server:status:id:"
 
 // ServerCountCacheKey Server Count Cache Key
 const ServerCountCacheKey = "server:count"
-
-// UserBindTelegramCacheKey User Bind Telegram Cache Key
-const UserBindTelegramCacheKey = "user:bind:telegram:code:"
-
-const CacheSmsCount = "cache:sms:count"
 
 // SendIntervalKeyPrefix Auth Code Send Interval Key Prefix
 const SendIntervalKeyPrefix = "send:interval:"

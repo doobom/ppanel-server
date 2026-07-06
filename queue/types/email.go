@@ -5,10 +5,19 @@ const (
 	ForthwithSendEmail = "forthwith:email:send"
 )
 
+const (
+	EmailTypeVerify        = "verify"
+	EmailTypeMaintenance   = "maintenance"
+	EmailTypeExpiration    = "expiration"
+	EmailTypeTrafficExceed = "traffic_exceed"
+	EmailTypeCustom        = "custom"
+)
+
 type (
 	SendEmailPayload struct {
-		Email   string `json:"to"`
-		Subject string `json:"subject"`
-		Content string `json:"content"`
+		Type    string                 `json:"type"`
+		Email   string                 `json:"to"`
+		Subject string                 `json:"subject"`
+		Content map[string]interface{} `json:"content"`
 	}
 )

@@ -3,12 +3,12 @@ package user
 import (
 	"context"
 
+	"github.com/perfect-panel/server/internal/model/log"
 	"github.com/perfect-panel/server/pkg/constant"
 
 	"github.com/perfect-panel/server/internal/model/user"
 	"github.com/perfect-panel/server/pkg/xerr"
 	"github.com/pkg/errors"
-	"gorm.io/gorm"
 
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/internal/types"
@@ -37,21 +37,24 @@ func (l *QueryUserAffiliateLogic) QueryUserAffiliate() (resp *types.QueryUserAff
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.InvalidAccess), "Invalid Access")
 	}
 	var sum int64
-	var total int64
-	err = l.svcCtx.UserModel.Transaction(l.ctx, func(db *gorm.DB) error {
-		return db.Model(&user.User{}).Where("referer_id = ?", u.Id).Count(&total).Find(&user.User{}).Error
-	})
+	total, err := l.svcCtx.Store.User().CountAffiliates(l.ctx, u.Id)
 	if err != nil {
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "Query User Affiliate failed: %v", err)
 	}
-	err = l.svcCtx.UserModel.Transaction(l.ctx, func(db *gorm.DB) error {
-		return db.Model(&user.CommissionLog{}).
-			Where("user_id = ?", u.Id).
-			Select("COALESCE(SUM(amount), 0)").
-			Scan(&sum).Error
+	data, _, err := l.svcCtx.Store.Log().FilterSystemLog(l.ctx, &log.FilterParams{
+		Page:     1,
+		Size:     99999,
+		Type:     log.TypeCommission.Uint8(),
+		ObjectID: u.Id,
 	})
-	if err != nil {
-		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "Query User Affiliate failed: %v", err)
+
+	for _, datum := range data {
+		content := log.Commission{}
+		if err = content.Unmarshal([]byte(datum.Content)); err != nil {
+			l.Errorf("[QueryUserAffiliate] unmarshal comission log failed: %v", err.Error())
+			continue
+		}
+		sum += content.Amount
 	}
 
 	return &types.QueryUserAffiliateCountResponse{

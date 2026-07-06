@@ -3,10 +3,10 @@ package auth
 import (
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/perfect-panel/server/internal/logic/auth"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/internal/types"
+	"github.com/perfect-panel/server/pkg/hertzx"
 	"github.com/perfect-panel/server/pkg/result"
 	"github.com/perfect-panel/server/pkg/turnstile"
 	"github.com/perfect-panel/server/pkg/xerr"
@@ -14,8 +14,8 @@ import (
 )
 
 // User Telephone register
-func TelephoneUserRegisterHandler(svcCtx *svc.ServiceContext) func(c *gin.Context) {
-	return func(c *gin.Context) {
+func TelephoneUserRegisterHandler(svcCtx *svc.ServiceContext) func(c *hertzx.Context) {
+	return func(c *hertzx.Context) {
 		var req types.TelephoneRegisterRequest
 		_ = c.ShouldBind(&req)
 		validateErr := svcCtx.Validate(&req)
@@ -25,6 +25,7 @@ func TelephoneUserRegisterHandler(svcCtx *svc.ServiceContext) func(c *gin.Contex
 		}
 		// get client ip
 		req.IP = c.ClientIP()
+		req.UserAgent = c.Request.UserAgent()
 		if svcCtx.Config.Verify.RegisterVerify {
 			verifyTurns := turnstile.New(turnstile.Config{
 				Secret:  svcCtx.Config.Verify.TurnstileSecret,

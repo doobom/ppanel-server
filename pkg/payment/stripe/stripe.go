@@ -155,7 +155,9 @@ func (c *Client) QueryOrderStatus(orderNo string) (bool, error) {
 
 // ParseNotify
 func (c *Client) ParseNotify(payload []byte, signature string) (*NotifyResult, error) {
-	event, err := webhook.ConstructEvent(payload, signature, c.Config.WebhookSecret)
+	event, err := webhook.ConstructEventWithOptions(payload, signature, c.Config.WebhookSecret, webhook.ConstructEventOptions{
+		IgnoreAPIVersionMismatch: true,
+	})
 	if err != nil {
 		return nil, err
 	}

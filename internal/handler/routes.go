@@ -4,14 +4,15 @@
 package handler
 
 import (
-	"github.com/gin-gonic/gin"
 	adminAds "github.com/perfect-panel/server/internal/handler/admin/ads"
 	adminAnnouncement "github.com/perfect-panel/server/internal/handler/admin/announcement"
+	adminApplication "github.com/perfect-panel/server/internal/handler/admin/application"
 	adminAuthMethod "github.com/perfect-panel/server/internal/handler/admin/authMethod"
 	adminConsole "github.com/perfect-panel/server/internal/handler/admin/console"
 	adminCoupon "github.com/perfect-panel/server/internal/handler/admin/coupon"
 	adminDocument "github.com/perfect-panel/server/internal/handler/admin/document"
 	adminLog "github.com/perfect-panel/server/internal/handler/admin/log"
+	adminMarketing "github.com/perfect-panel/server/internal/handler/admin/marketing"
 	adminOrder "github.com/perfect-panel/server/internal/handler/admin/order"
 	adminPayment "github.com/perfect-panel/server/internal/handler/admin/payment"
 	adminServer "github.com/perfect-panel/server/internal/handler/admin/server"
@@ -20,15 +21,6 @@ import (
 	adminTicket "github.com/perfect-panel/server/internal/handler/admin/ticket"
 	adminTool "github.com/perfect-panel/server/internal/handler/admin/tool"
 	adminUser "github.com/perfect-panel/server/internal/handler/admin/user"
-	appAnnouncement "github.com/perfect-panel/server/internal/handler/app/announcement"
-	appAuth "github.com/perfect-panel/server/internal/handler/app/auth"
-	appDocument "github.com/perfect-panel/server/internal/handler/app/document"
-	appNode "github.com/perfect-panel/server/internal/handler/app/node"
-	appOrder "github.com/perfect-panel/server/internal/handler/app/order"
-	appPayment "github.com/perfect-panel/server/internal/handler/app/payment"
-	appSubscribe "github.com/perfect-panel/server/internal/handler/app/subscribe"
-	appUser "github.com/perfect-panel/server/internal/handler/app/user"
-	appWs "github.com/perfect-panel/server/internal/handler/app/ws"
 	auth "github.com/perfect-panel/server/internal/handler/auth"
 	authOauth "github.com/perfect-panel/server/internal/handler/auth/oauth"
 	common "github.com/perfect-panel/server/internal/handler/common"
@@ -40,12 +32,12 @@ import (
 	publicSubscribe "github.com/perfect-panel/server/internal/handler/public/subscribe"
 	publicTicket "github.com/perfect-panel/server/internal/handler/public/ticket"
 	publicUser "github.com/perfect-panel/server/internal/handler/public/user"
-	server "github.com/perfect-panel/server/internal/handler/server"
 	"github.com/perfect-panel/server/internal/middleware"
 	"github.com/perfect-panel/server/internal/svc"
+	"github.com/perfect-panel/server/pkg/hertzx"
 )
 
-func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
+func RegisterHandlers(router *hertzx.Engine, serverCtx *svc.ServiceContext) {
 	adminAdsGroupRouter := router.Group("/v1/admin/ads")
 	adminAdsGroupRouter.Use(middleware.AuthMiddleware(serverCtx))
 
@@ -84,6 +76,26 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 
 		// Get announcement list
 		adminAnnouncementGroupRouter.GET("/list", adminAnnouncement.GetAnnouncementListHandler(serverCtx))
+	}
+
+	adminApplicationGroupRouter := router.Group("/v1/admin/application")
+	adminApplicationGroupRouter.Use(middleware.AuthMiddleware(serverCtx))
+
+	{
+		// Create subscribe application
+		adminApplicationGroupRouter.POST("/", adminApplication.CreateSubscribeApplicationHandler(serverCtx))
+
+		// Preview Template
+		adminApplicationGroupRouter.GET("/preview", adminApplication.PreviewSubscribeTemplateHandler(serverCtx))
+
+		// Update subscribe application
+		adminApplicationGroupRouter.PUT("/subscribe_application", adminApplication.UpdateSubscribeApplicationHandler(serverCtx))
+
+		// Delete subscribe application
+		adminApplicationGroupRouter.DELETE("/subscribe_application", adminApplication.DeleteSubscribeApplicationHandler(serverCtx))
+
+		// Get subscribe application list
+		adminApplicationGroupRouter.GET("/subscribe_application_list", adminApplication.GetSubscribeApplicationListHandler(serverCtx))
 	}
 
 	adminAuthMethodGroupRouter := router.Group("/v1/admin/auth-method")
@@ -176,8 +188,79 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 	adminLogGroupRouter.Use(middleware.AuthMiddleware(serverCtx))
 
 	{
+		// Filter balance log
+		adminLogGroupRouter.GET("/balance/list", adminLog.FilterBalanceLogHandler(serverCtx))
+
+		// Filter commission log
+		adminLogGroupRouter.GET("/commission/list", adminLog.FilterCommissionLogHandler(serverCtx))
+
+		// Filter email log
+		adminLogGroupRouter.GET("/email/list", adminLog.FilterEmailLogHandler(serverCtx))
+
+		// Filter gift log
+		adminLogGroupRouter.GET("/gift/list", adminLog.FilterGiftLogHandler(serverCtx))
+
+		// Filter login log
+		adminLogGroupRouter.GET("/login/list", adminLog.FilterLoginLogHandler(serverCtx))
+
 		// Get message log list
 		adminLogGroupRouter.GET("/message/list", adminLog.GetMessageLogListHandler(serverCtx))
+
+		// Filter mobile log
+		adminLogGroupRouter.GET("/mobile/list", adminLog.FilterMobileLogHandler(serverCtx))
+
+		// Filter register log
+		adminLogGroupRouter.GET("/register/list", adminLog.FilterRegisterLogHandler(serverCtx))
+
+		// Filter server traffic log
+		adminLogGroupRouter.GET("/server/traffic/list", adminLog.FilterServerTrafficLogHandler(serverCtx))
+
+		// Get log setting
+		adminLogGroupRouter.GET("/setting", adminLog.GetLogSettingHandler(serverCtx))
+
+		// Update log setting
+		adminLogGroupRouter.POST("/setting", adminLog.UpdateLogSettingHandler(serverCtx))
+
+		// Filter subscribe log
+		adminLogGroupRouter.GET("/subscribe/list", adminLog.FilterSubscribeLogHandler(serverCtx))
+
+		// Filter reset subscribe log
+		adminLogGroupRouter.GET("/subscribe/reset/list", adminLog.FilterResetSubscribeLogHandler(serverCtx))
+
+		// Filter user subscribe traffic log
+		adminLogGroupRouter.GET("/subscribe/traffic/list", adminLog.FilterUserSubscribeTrafficLogHandler(serverCtx))
+
+		// Filter traffic log details
+		adminLogGroupRouter.GET("/traffic/details", adminLog.FilterTrafficLogDetailsHandler(serverCtx))
+	}
+
+	adminMarketingGroupRouter := router.Group("/v1/admin/marketing")
+	adminMarketingGroupRouter.Use(middleware.AuthMiddleware(serverCtx))
+
+	{
+		// Get batch send email task list
+		adminMarketingGroupRouter.GET("/email/batch/list", adminMarketing.GetBatchSendEmailTaskListHandler(serverCtx))
+
+		// Get pre-send email count
+		adminMarketingGroupRouter.POST("/email/batch/pre-send-count", adminMarketing.GetPreSendEmailCountHandler(serverCtx))
+
+		// Create a batch send email task
+		adminMarketingGroupRouter.POST("/email/batch/send", adminMarketing.CreateBatchSendEmailTaskHandler(serverCtx))
+
+		// Get batch send email task status
+		adminMarketingGroupRouter.POST("/email/batch/status", adminMarketing.GetBatchSendEmailTaskStatusHandler(serverCtx))
+
+		// Stop a batch send email task
+		adminMarketingGroupRouter.POST("/email/batch/stop", adminMarketing.StopBatchSendEmailTaskHandler(serverCtx))
+
+		// Create a quota task
+		adminMarketingGroupRouter.POST("/quota/create", adminMarketing.CreateQuotaTaskHandler(serverCtx))
+
+		// Query quota task list
+		adminMarketingGroupRouter.GET("/quota/list", adminMarketing.QueryQuotaTaskListHandler(serverCtx))
+
+		// Query quota task pre-count
+		adminMarketingGroupRouter.POST("/quota/pre-count", adminMarketing.QueryQuotaTaskPreCountHandler(serverCtx))
 	}
 
 	adminOrderGroupRouter := router.Group("/v1/admin/order")
@@ -218,56 +301,50 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 	adminServerGroupRouter.Use(middleware.AuthMiddleware(serverCtx))
 
 	{
-		// Update node
-		adminServerGroupRouter.PUT("/", adminServer.UpdateNodeHandler(serverCtx))
+		// Create Server
+		adminServerGroupRouter.POST("/create", adminServer.CreateServerHandler(serverCtx))
 
-		// Create node
-		adminServerGroupRouter.POST("/", adminServer.CreateNodeHandler(serverCtx))
+		// Delete Server
+		adminServerGroupRouter.POST("/delete", adminServer.DeleteServerHandler(serverCtx))
 
-		// Delete node
-		adminServerGroupRouter.DELETE("/", adminServer.DeleteNodeHandler(serverCtx))
+		// Filter Server List
+		adminServerGroupRouter.GET("/list", adminServer.FilterServerListHandler(serverCtx))
 
-		// Batch delete node
-		adminServerGroupRouter.DELETE("/batch", adminServer.BatchDeleteNodeHandler(serverCtx))
+		// Create Node
+		adminServerGroupRouter.POST("/node/create", adminServer.CreateNodeHandler(serverCtx))
 
-		// Get node detail
-		adminServerGroupRouter.GET("/detail", adminServer.GetNodeDetailHandler(serverCtx))
+		// Delete Node
+		adminServerGroupRouter.POST("/node/delete", adminServer.DeleteNodeHandler(serverCtx))
 
-		// Create node group
-		adminServerGroupRouter.POST("/group", adminServer.CreateNodeGroupHandler(serverCtx))
+		// Filter Node List
+		adminServerGroupRouter.GET("/node/list", adminServer.FilterNodeListHandler(serverCtx))
 
-		// Update node group
-		adminServerGroupRouter.PUT("/group", adminServer.UpdateNodeGroupHandler(serverCtx))
+		// Reset node sort
+		adminServerGroupRouter.POST("/node/sort", adminServer.ResetSortWithNodeHandler(serverCtx))
 
-		// Delete node group
-		adminServerGroupRouter.DELETE("/group", adminServer.DeleteNodeGroupHandler(serverCtx))
+		// Toggle Node Status
+		adminServerGroupRouter.POST("/node/status/toggle", adminServer.ToggleNodeStatusHandler(serverCtx))
 
-		// Batch delete node group
-		adminServerGroupRouter.DELETE("/group/batch", adminServer.BatchDeleteNodeGroupHandler(serverCtx))
+		// Query all node tags
+		adminServerGroupRouter.GET("/node/tags", adminServer.QueryNodeTagHandler(serverCtx))
 
-		// Get node group list
-		adminServerGroupRouter.GET("/group/list", adminServer.GetNodeGroupListHandler(serverCtx))
+		// Get Server Node Config
+		adminServerGroupRouter.GET("/node_config", adminServer.GetServerNodeConfigHandler(serverCtx))
 
-		// Get node list
-		adminServerGroupRouter.GET("/list", adminServer.GetNodeListHandler(serverCtx))
+		// Update Server Node Config
+		adminServerGroupRouter.POST("/node_config/update", adminServer.UpdateServerNodeConfigHandler(serverCtx))
 
-		// Create rule group
-		adminServerGroupRouter.POST("/rule_group", adminServer.CreateRuleGroupHandler(serverCtx))
+		// Update Node
+		adminServerGroupRouter.POST("/node/update", adminServer.UpdateNodeHandler(serverCtx))
 
-		// Update rule group
-		adminServerGroupRouter.PUT("/rule_group", adminServer.UpdateRuleGroupHandler(serverCtx))
+		// Get Server Protocols
+		adminServerGroupRouter.GET("/protocols", adminServer.GetServerProtocolsHandler(serverCtx))
 
-		// Delete rule group
-		adminServerGroupRouter.DELETE("/rule_group", adminServer.DeleteRuleGroupHandler(serverCtx))
+		// Reset server sort
+		adminServerGroupRouter.POST("/server/sort", adminServer.ResetSortWithServerHandler(serverCtx))
 
-		// Get rule group list
-		adminServerGroupRouter.GET("/rule_group_list", adminServer.GetRuleGroupListHandler(serverCtx))
-
-		// Node sort
-		adminServerGroupRouter.POST("/sort", adminServer.NodeSortHandler(serverCtx))
-
-		// Get node tag list
-		adminServerGroupRouter.GET("/tag/list", adminServer.GetNodeTagListHandler(serverCtx))
+		// Update Server
+		adminServerGroupRouter.POST("/update", adminServer.UpdateServerHandler(serverCtx))
 	}
 
 	adminSubscribeGroupRouter := router.Group("/v1/admin/subscribe")
@@ -307,6 +384,9 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 		// Get subscribe list
 		adminSubscribeGroupRouter.GET("/list", adminSubscribe.GetSubscribeListHandler(serverCtx))
 
+		// Reset all subscribe tokens
+		adminSubscribeGroupRouter.POST("/reset_all_token", adminSubscribe.ResetAllSubscribeTokenHandler(serverCtx))
+
 		// Subscribe sort
 		adminSubscribeGroupRouter.POST("/sort", adminSubscribe.SubscribeSortHandler(serverCtx))
 	}
@@ -315,33 +395,6 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 	adminSystemGroupRouter.Use(middleware.AuthMiddleware(serverCtx))
 
 	{
-		// Get application
-		adminSystemGroupRouter.GET("/application", adminSystem.GetApplicationHandler(serverCtx))
-
-		// Update application
-		adminSystemGroupRouter.PUT("/application", adminSystem.UpdateApplicationHandler(serverCtx))
-
-		// Create application
-		adminSystemGroupRouter.POST("/application", adminSystem.CreateApplicationHandler(serverCtx))
-
-		// Delete application
-		adminSystemGroupRouter.DELETE("/application", adminSystem.DeleteApplicationHandler(serverCtx))
-
-		// update application config
-		adminSystemGroupRouter.PUT("/application_config", adminSystem.UpdateApplicationConfigHandler(serverCtx))
-
-		// get application config
-		adminSystemGroupRouter.GET("/application_config", adminSystem.GetApplicationConfigHandler(serverCtx))
-
-		// Update application version
-		adminSystemGroupRouter.PUT("/application_version", adminSystem.UpdateApplicationVersionHandler(serverCtx))
-
-		// Create application version
-		adminSystemGroupRouter.POST("/application_version", adminSystem.CreateApplicationVersionHandler(serverCtx))
-
-		// Delete application
-		adminSystemGroupRouter.DELETE("/application_version", adminSystem.DeleteApplicationVersionHandler(serverCtx))
-
 		// Get Currency Config
 		adminSystemGroupRouter.GET("/currency_config", adminSystem.GetCurrencyConfigHandler(serverCtx))
 
@@ -357,11 +410,17 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 		// Update invite config
 		adminSystemGroupRouter.PUT("/invite_config", adminSystem.UpdateInviteConfigHandler(serverCtx))
 
+		// Get Module Config
+		adminSystemGroupRouter.GET("/module", adminSystem.GetModuleConfigHandler(serverCtx))
+
 		// Get node config
 		adminSystemGroupRouter.GET("/node_config", adminSystem.GetNodeConfigHandler(serverCtx))
 
 		// Update node config
 		adminSystemGroupRouter.PUT("/node_config", adminSystem.UpdateNodeConfigHandler(serverCtx))
+
+		// PreView Node Multiplier
+		adminSystemGroupRouter.GET("/node_multiplier/preview", adminSystem.PreViewNodeMultiplierHandler(serverCtx))
 
 		// get Privacy Policy Config
 		adminSystemGroupRouter.GET("/privacy", adminSystem.GetPrivacyPolicyConfigHandler(serverCtx))
@@ -392,9 +451,6 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 
 		// Update subscribe config
 		adminSystemGroupRouter.PUT("/subscribe_config", adminSystem.UpdateSubscribeConfigHandler(serverCtx))
-
-		// Get subscribe type
-		adminSystemGroupRouter.GET("/subscribe_type", adminSystem.GetSubscribeTypeHandler(serverCtx))
 
 		// Get Team of Service Config
 		adminSystemGroupRouter.GET("/tos_config", adminSystem.GetTosConfigHandler(serverCtx))
@@ -436,11 +492,17 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 	adminToolGroupRouter.Use(middleware.AuthMiddleware(serverCtx))
 
 	{
+		// Query IP Location
+		adminToolGroupRouter.GET("/ip/location", adminTool.QueryIPLocationHandler(serverCtx))
+
 		// Get System Log
 		adminToolGroupRouter.GET("/log", adminTool.GetSystemLogHandler(serverCtx))
 
 		// Restart System
 		adminToolGroupRouter.GET("/restart", adminTool.RestartSystemHandler(serverCtx))
+
+		// Get Version
+		adminToolGroupRouter.GET("/version", adminTool.GetVersionHandler(serverCtx))
 	}
 
 	adminUserGroupRouter := router.Group("/v1/admin/user")
@@ -516,158 +578,24 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 		// Get user subcribe logs
 		adminUserGroupRouter.GET("/subscribe/logs", adminUser.GetUserSubscribeLogsHandler(serverCtx))
 
+		// Get user subcribe reset traffic logs
+		adminUserGroupRouter.GET("/subscribe/reset/logs", adminUser.GetUserSubscribeResetTrafficLogsHandler(serverCtx))
+
+		// Reset user subscribe token
+		adminUserGroupRouter.POST("/subscribe/reset/token", adminUser.ResetUserSubscribeTokenHandler(serverCtx))
+
+		// Reset user subscribe traffic
+		adminUserGroupRouter.POST("/subscribe/reset/traffic", adminUser.ResetUserSubscribeTrafficHandler(serverCtx))
+
+		// Stop user subscribe
+		adminUserGroupRouter.POST("/subscribe/toggle", adminUser.ToggleUserSubscribeStatusHandler(serverCtx))
+
 		// Get user subcribe traffic logs
 		adminUserGroupRouter.GET("/subscribe/traffic_logs", adminUser.GetUserSubscribeTrafficLogsHandler(serverCtx))
 	}
 
-	appAnnouncementGroupRouter := router.Group("/v1/app/announcement")
-	appAnnouncementGroupRouter.Use(middleware.AppMiddleware(serverCtx), middleware.AuthMiddleware(serverCtx))
-
-	{
-		// Query announcement
-		appAnnouncementGroupRouter.GET("/list", appAnnouncement.QueryAnnouncementHandler(serverCtx))
-	}
-
-	appAuthGroupRouter := router.Group("/v1/app/auth")
-	appAuthGroupRouter.Use(middleware.AppMiddleware(serverCtx))
-
-	{
-		// Check Account
-		appAuthGroupRouter.POST("/check", appAuth.CheckHandler(serverCtx))
-
-		// GetAppConfig
-		appAuthGroupRouter.POST("/config", appAuth.GetAppConfigHandler(serverCtx))
-
-		// Login
-		appAuthGroupRouter.POST("/login", appAuth.LoginHandler(serverCtx))
-
-		// Register
-		appAuthGroupRouter.POST("/register", appAuth.RegisterHandler(serverCtx))
-
-		// Reset Password
-		appAuthGroupRouter.POST("/reset_password", appAuth.ResetPasswordHandler(serverCtx))
-	}
-
-	appDocumentGroupRouter := router.Group("/v1/app/document")
-	appDocumentGroupRouter.Use(middleware.AppMiddleware(serverCtx), middleware.AuthMiddleware(serverCtx))
-
-	{
-		// Get document detail
-		appDocumentGroupRouter.GET("/detail", appDocument.QueryDocumentDetailHandler(serverCtx))
-
-		// Get document list
-		appDocumentGroupRouter.GET("/list", appDocument.QueryDocumentListHandler(serverCtx))
-	}
-
-	appNodeGroupRouter := router.Group("/v1/app/node")
-	appNodeGroupRouter.Use(middleware.AppMiddleware(serverCtx), middleware.AuthMiddleware(serverCtx))
-
-	{
-		// Get Node list
-		appNodeGroupRouter.GET("/list", appNode.GetNodeListHandler(serverCtx))
-
-		// Get rule group list
-		appNodeGroupRouter.GET("/rule_group_list", appNode.GetRuleGroupListHandler(serverCtx))
-	}
-
-	appOrderGroupRouter := router.Group("/v1/app/order")
-	appOrderGroupRouter.Use(middleware.AppMiddleware(serverCtx), middleware.AuthMiddleware(serverCtx))
-
-	{
-		// Checkout order
-		appOrderGroupRouter.POST("/checkout", appOrder.CheckoutOrderHandler(serverCtx))
-
-		// Close order
-		appOrderGroupRouter.POST("/close", appOrder.CloseOrderHandler(serverCtx))
-
-		// Get order
-		appOrderGroupRouter.GET("/detail", appOrder.QueryOrderDetailHandler(serverCtx))
-
-		// Get order list
-		appOrderGroupRouter.GET("/list", appOrder.QueryOrderListHandler(serverCtx))
-
-		// Pre create order
-		appOrderGroupRouter.POST("/pre", appOrder.PreCreateOrderHandler(serverCtx))
-
-		// purchase Subscription
-		appOrderGroupRouter.POST("/purchase", appOrder.PurchaseHandler(serverCtx))
-
-		// Recharge
-		appOrderGroupRouter.POST("/recharge", appOrder.RechargeHandler(serverCtx))
-
-		// Renewal Subscription
-		appOrderGroupRouter.POST("/renewal", appOrder.RenewalHandler(serverCtx))
-
-		// Reset traffic
-		appOrderGroupRouter.POST("/reset", appOrder.ResetTrafficHandler(serverCtx))
-	}
-
-	appPaymentGroupRouter := router.Group("/v1/app/payment")
-	appPaymentGroupRouter.Use(middleware.AppMiddleware(serverCtx), middleware.AuthMiddleware(serverCtx))
-
-	{
-		// Get available payment methods
-		appPaymentGroupRouter.GET("/methods", appPayment.GetAvailablePaymentMethodsHandler(serverCtx))
-	}
-
-	appSubscribeGroupRouter := router.Group("/v1/app/subscribe")
-	appSubscribeGroupRouter.Use(middleware.AppMiddleware(serverCtx), middleware.AuthMiddleware(serverCtx))
-
-	{
-		// Get application config
-		appSubscribeGroupRouter.GET("/application/config", appSubscribe.QueryApplicationConfigHandler(serverCtx))
-
-		// Get subscribe group list
-		appSubscribeGroupRouter.GET("/group/list", appSubscribe.QuerySubscribeGroupListHandler(serverCtx))
-
-		// Get subscribe list
-		appSubscribeGroupRouter.GET("/list", appSubscribe.QuerySubscribeListHandler(serverCtx))
-
-		// Reset user subscription period
-		appSubscribeGroupRouter.POST("/reset/period", appSubscribe.ResetUserSubscribePeriodHandler(serverCtx))
-
-		// Get  Already subscribed to package
-		appSubscribeGroupRouter.GET("/user/already_subscribe", appSubscribe.QueryUserAlreadySubscribeHandler(serverCtx))
-
-		// Get Available subscriptions for users
-		appSubscribeGroupRouter.GET("/user/available_subscribe", appSubscribe.QueryUserAvailableUserSubscribeHandler(serverCtx))
-	}
-
-	appUserGroupRouter := router.Group("/v1/app/user")
-	appUserGroupRouter.Use(middleware.AppMiddleware(serverCtx), middleware.AuthMiddleware(serverCtx))
-
-	{
-		// Delete Account
-		appUserGroupRouter.DELETE("/account", appUser.DeleteAccountHandler(serverCtx))
-
-		// Query User Affiliate Count
-		appUserGroupRouter.GET("/affiliate/count", appUser.QueryUserAffiliateHandler(serverCtx))
-
-		// Query User Affiliate List
-		appUserGroupRouter.GET("/affiliate/list", appUser.QueryUserAffiliateListHandler(serverCtx))
-
-		// query user info
-		appUserGroupRouter.GET("/info", appUser.QueryUserInfoHandler(serverCtx))
-
-		// Get user online time total
-		appUserGroupRouter.GET("/online_time/statistics", appUser.GetUserOnlineTimeStatisticsHandler(serverCtx))
-
-		// Update Password
-		appUserGroupRouter.PUT("/password", appUser.UpdatePasswordHandler(serverCtx))
-
-		// Get user subcribe traffic logs
-		appUserGroupRouter.GET("/subscribe/traffic_logs", appUser.GetUserSubscribeTrafficLogsHandler(serverCtx))
-	}
-
-	appWsGroupRouter := router.Group("/v1/app/ws")
-	appWsGroupRouter.Use(middleware.AuthMiddleware(serverCtx))
-
-	{
-		// App heartbeat
-		appWsGroupRouter.GET("/:userid/:identifier", appWs.AppWsHandler(serverCtx))
-	}
-
 	authGroupRouter := router.Group("/v1/auth")
+	authGroupRouter.Use(middleware.DeviceMiddleware(serverCtx))
 
 	{
 		// Check user is exist
@@ -678,6 +606,9 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 
 		// User login
 		authGroupRouter.POST("/login", auth.UserLoginHandler(serverCtx))
+
+		// Device Login
+		authGroupRouter.POST("/login/device", auth.DeviceLoginHandler(serverCtx))
 
 		// User Telephone login
 		authGroupRouter.POST("/login/telephone", auth.TelephoneLoginHandler(serverCtx))
@@ -709,16 +640,20 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 	}
 
 	commonGroupRouter := router.Group("/v1/common")
+	commonGroupRouter.Use(middleware.DeviceMiddleware(serverCtx))
 
 	{
 		// Get Ads
 		commonGroupRouter.GET("/ads", common.GetAdsHandler(serverCtx))
 
-		// Get Tos Content
-		commonGroupRouter.GET("/application", common.GetApplicationHandler(serverCtx))
-
 		// Check verification code
 		commonGroupRouter.POST("/check_verification_code", common.CheckVerificationCodeHandler(serverCtx))
+
+		// Get Client
+		commonGroupRouter.GET("/client", common.GetClientHandler(serverCtx))
+
+		// Heartbeat
+		commonGroupRouter.GET("/heartbeat", common.HeartbeatHandler(serverCtx))
 
 		// Get verification code
 		commonGroupRouter.POST("/send_code", common.SendEmailCodeHandler(serverCtx))
@@ -740,7 +675,7 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 	}
 
 	publicAnnouncementGroupRouter := router.Group("/v1/public/announcement")
-	publicAnnouncementGroupRouter.Use(middleware.AuthMiddleware(serverCtx))
+	publicAnnouncementGroupRouter.Use(middleware.AuthMiddleware(serverCtx), middleware.DeviceMiddleware(serverCtx))
 
 	{
 		// Query announcement
@@ -748,7 +683,7 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 	}
 
 	publicDocumentGroupRouter := router.Group("/v1/public/document")
-	publicDocumentGroupRouter.Use(middleware.AuthMiddleware(serverCtx))
+	publicDocumentGroupRouter.Use(middleware.AuthMiddleware(serverCtx), middleware.DeviceMiddleware(serverCtx))
 
 	{
 		// Get document detail
@@ -759,7 +694,7 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 	}
 
 	publicOrderGroupRouter := router.Group("/v1/public/order")
-	publicOrderGroupRouter.Use(middleware.AuthMiddleware(serverCtx))
+	publicOrderGroupRouter.Use(middleware.AuthMiddleware(serverCtx), middleware.DeviceMiddleware(serverCtx))
 
 	{
 		// Close order
@@ -788,7 +723,7 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 	}
 
 	publicPaymentGroupRouter := router.Group("/v1/public/payment")
-	publicPaymentGroupRouter.Use(middleware.AuthMiddleware(serverCtx))
+	publicPaymentGroupRouter.Use(middleware.AuthMiddleware(serverCtx), middleware.DeviceMiddleware(serverCtx))
 
 	{
 		// Get available payment methods
@@ -796,6 +731,7 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 	}
 
 	publicPortalGroupRouter := router.Group("/v1/public/portal")
+	publicPortalGroupRouter.Use(middleware.DeviceMiddleware(serverCtx))
 
 	{
 		// Purchase Checkout
@@ -818,21 +754,18 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 	}
 
 	publicSubscribeGroupRouter := router.Group("/v1/public/subscribe")
-	publicSubscribeGroupRouter.Use(middleware.AuthMiddleware(serverCtx))
+	publicSubscribeGroupRouter.Use(middleware.AuthMiddleware(serverCtx), middleware.DeviceMiddleware(serverCtx))
 
 	{
-		// Get application config
-		publicSubscribeGroupRouter.GET("/application/config", publicSubscribe.QueryApplicationConfigHandler(serverCtx))
-
-		// Get subscribe group list
-		publicSubscribeGroupRouter.GET("/group/list", publicSubscribe.QuerySubscribeGroupListHandler(serverCtx))
-
 		// Get subscribe list
 		publicSubscribeGroupRouter.GET("/list", publicSubscribe.QuerySubscribeListHandler(serverCtx))
+
+		// Get user subscribe node info
+		publicSubscribeGroupRouter.GET("/node/list", publicSubscribe.QueryUserSubscribeNodeListHandler(serverCtx))
 	}
 
 	publicTicketGroupRouter := router.Group("/v1/public/ticket")
-	publicTicketGroupRouter.Use(middleware.AuthMiddleware(serverCtx))
+	publicTicketGroupRouter.Use(middleware.AuthMiddleware(serverCtx), middleware.DeviceMiddleware(serverCtx))
 
 	{
 		// Update ticket status
@@ -852,7 +785,7 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 	}
 
 	publicUserGroupRouter := router.Group("/v1/public/user")
-	publicUserGroupRouter.Use(middleware.AuthMiddleware(serverCtx))
+	publicUserGroupRouter.Use(middleware.AuthMiddleware(serverCtx), middleware.DeviceMiddleware(serverCtx))
 
 	{
 		// Query User Affiliate Count
@@ -882,6 +815,12 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 		// Query User Commission Log
 		publicUserGroupRouter.GET("/commission_log", publicUser.QueryUserCommissionLogHandler(serverCtx))
 
+		// Commission Withdraw
+		publicUserGroupRouter.POST("/commission_withdraw", publicUser.CommissionWithdrawHandler(serverCtx))
+
+		// Get Device List
+		publicUserGroupRouter.GET("/devices", publicUser.GetDeviceListHandler(serverCtx))
+
 		// Query User Info
 		publicUserGroupRouter.GET("/info", publicUser.QueryUserInfoHandler(serverCtx))
 
@@ -897,14 +836,23 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 		// Update User Password
 		publicUserGroupRouter.PUT("/password", publicUser.UpdateUserPasswordHandler(serverCtx))
 
+		// Update User Rules
+		publicUserGroupRouter.PUT("/rules", publicUser.UpdateUserRulesHandler(serverCtx))
+
 		// Query User Subscribe
 		publicUserGroupRouter.GET("/subscribe", publicUser.QueryUserSubscribeHandler(serverCtx))
 
 		// Get Subscribe Log
 		publicUserGroupRouter.GET("/subscribe_log", publicUser.GetSubscribeLogHandler(serverCtx))
 
+		// Update User Subscribe Note
+		publicUserGroupRouter.PUT("/subscribe_note", publicUser.UpdateUserSubscribeNoteHandler(serverCtx))
+
 		// Reset User Subscribe Token
 		publicUserGroupRouter.PUT("/subscribe_token", publicUser.ResetUserSubscribeTokenHandler(serverCtx))
+
+		// Unbind Device
+		publicUserGroupRouter.PUT("/unbind_device", publicUser.UnbindDeviceHandler(serverCtx))
 
 		// Unbind OAuth
 		publicUserGroupRouter.POST("/unbind_oauth", publicUser.UnbindOAuthHandler(serverCtx))
@@ -920,25 +868,9 @@ func RegisterHandlers(router *gin.Engine, serverCtx *svc.ServiceContext) {
 
 		// Verify Email
 		publicUserGroupRouter.POST("/verify_email", publicUser.VerifyEmailHandler(serverCtx))
+
+		// Query Withdrawal Log
+		publicUserGroupRouter.GET("/withdrawal_log", publicUser.QueryWithdrawalLogHandler(serverCtx))
 	}
 
-	serverGroupRouter := router.Group("/v1/server")
-	serverGroupRouter.Use(middleware.ServerMiddleware(serverCtx))
-
-	{
-		// Get server config
-		serverGroupRouter.GET("/config", server.GetServerConfigHandler(serverCtx))
-
-		// Push online users
-		serverGroupRouter.POST("/online", server.PushOnlineUsersHandler(serverCtx))
-
-		// Push user Traffic
-		serverGroupRouter.POST("/push", server.ServerPushUserTrafficHandler(serverCtx))
-
-		// Push server status
-		serverGroupRouter.POST("/status", server.ServerPushStatusHandler(serverCtx))
-
-		// Get user list
-		serverGroupRouter.GET("/user", server.GetServerUserListHandler(serverCtx))
-	}
 }

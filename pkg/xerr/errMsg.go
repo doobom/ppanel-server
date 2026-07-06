@@ -14,6 +14,7 @@ func init() {
 		ErrorTokenEmpty:   "User token is empty",
 		ErrorTokenInvalid: "User token is invalid",
 		ErrorTokenExpire:  "User token is expired",
+		SecretIsEmpty:     "Secret is empty",
 		InvalidAccess:     "Invalid access",
 		InvalidCiphertext: "Invalid ciphertext",
 		// Database error
@@ -45,6 +46,8 @@ func init() {
 		CouponAlreadyUsed:       "Coupon has already been used",
 		CouponNotApplicable:     "Coupon does not match the order or conditions",
 		CouponInsufficientUsage: "Coupon has insufficient remaining uses",
+		CouponExpired:           "Coupon is expired",
+		CouponDisabled:          "Coupon is disabled",
 
 		// Subscribe
 		SubscribeExpired:                "Subscribe is expired",
@@ -53,6 +56,7 @@ func init() {
 		SubscribeIsUsedError:            "Subscribe is used",
 		SingleSubscribeModeExceedsLimit: "Single subscribe mode exceeds limit",
 		SubscribeQuotaLimit:             "Subscribe quota limit",
+		SubscribeOutOfStock:             "Subscribe out of stock",
 
 		// auth error
 		VerifyCodeError: "Verify code error",

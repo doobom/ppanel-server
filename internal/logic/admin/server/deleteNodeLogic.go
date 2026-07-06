@@ -2,14 +2,14 @@ package server
 
 import (
 	"context"
-	"github.com/perfect-panel/server/pkg/tool"
+	"strings"
 
+	"github.com/perfect-panel/server/internal/model/node"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/logger"
 	"github.com/perfect-panel/server/pkg/xerr"
 	"github.com/pkg/errors"
-	"gorm.io/gorm"
 )
 
 type DeleteNodeLogic struct {
@@ -18,6 +18,7 @@ type DeleteNodeLogic struct {
 	svcCtx *svc.ServiceContext
 }
 
+// NewDeleteNodeLogic Delete Node
 func NewDeleteNodeLogic(ctx context.Context, svcCtx *svc.ServiceContext) *DeleteNodeLogic {
 	return &DeleteNodeLogic{
 		Logger: logger.WithContext(ctx),
@@ -27,33 +28,25 @@ func NewDeleteNodeLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Delete
 }
 
 func (l *DeleteNodeLogic) DeleteNode(req *types.DeleteNodeRequest) error {
-	err := l.svcCtx.DB.Transaction(func(tx *gorm.DB) error {
-		// Delete server
-		err := l.svcCtx.ServerModel.Delete(l.ctx, req.Id, tx)
-		if err != nil {
-			return err
-		}
-		// Delete server to subscribe
-		subs, err := l.svcCtx.SubscribeModel.QuerySubscribeIdsByServerIdAndServerGroupId(l.ctx, req.Id, 0)
-		if err != nil {
-			l.Logger.Errorf("[DeleteNode] QuerySubscribeIdsByServerIdAndServerGroupId error: %v", err.Error())
-			return err
-		}
+	nodeStore := l.svcCtx.Store.Node()
+	data, err := nodeStore.FindOneNode(l.ctx, req.Id)
+	if err != nil {
+		l.Errorw("[DeleteNode] Query Database Error: ", logger.Field("error", err.Error()))
+		return errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "[DeleteNode] Query Database Error")
+	}
 
-		for _, sub := range subs {
-			servers := tool.StringToInt64Slice(sub.Server)
-			newServers := tool.RemoveElementBySlice(servers, req.Id)
-			sub.Server = tool.Int64SliceToString(newServers)
-			if err = l.svcCtx.SubscribeModel.Update(l.ctx, sub, tx); err != nil {
-				l.Logger.Errorf("[DeleteNode] UpdateSubscribe error: %v", err.Error())
-				return err
-			}
-		}
-		return nil
-	})
+	err = nodeStore.DeleteNode(l.ctx, req.Id)
 	if err != nil {
 		l.Errorw("[DeleteNode] Delete Database Error: ", logger.Field("error", err.Error()))
-		return errors.Wrapf(xerr.NewErrCode(xerr.DatabaseDeletedError), "delete server error: %v", err)
+		return errors.Wrapf(xerr.NewErrCode(xerr.DatabaseDeletedError), "[DeleteNode] Delete Database Error")
 	}
-	return nil
+
+	return nodeStore.ClearNodeCache(l.ctx, &node.FilterNodeParams{
+		Page:     1,
+		Size:     1000,
+		ServerId: []int64{data.ServerId},
+		Tag:      strings.Split(data.Tags, ","),
+		Search:   "",
+		Protocol: data.Protocol,
+	})
 }

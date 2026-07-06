@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/perfect-panel/server/internal/model/log"
 	"github.com/perfect-panel/server/pkg/constant"
 
 	"github.com/perfect-panel/server/internal/config"
 	"github.com/perfect-panel/server/internal/model/user"
+	"github.com/perfect-panel/server/internal/repository"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/jwt"
@@ -80,7 +82,7 @@ func (l *TelephoneUserRegisterLogic) TelephoneUserRegister(req *types.TelephoneR
 	}
 	l.svcCtx.Redis.Del(l.ctx, cacheKey)
 	// Check if the user exists
-	_, err = l.svcCtx.UserModel.FindUserAuthMethodByOpenID(l.ctx, "mobile", phoneNumber)
+	_, err = l.svcCtx.Store.User().FindUserAuthMethodByOpenID(l.ctx, "mobile", phoneNumber)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		l.Errorw("FindOneByTelephone Error", logger.Field("error", err))
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "query user info failed: %v", err.Error())
@@ -95,7 +97,7 @@ func (l *TelephoneUserRegisterLogic) TelephoneUserRegister(req *types.TelephoneR
 		}
 	} else {
 		// Check if the invite code is valid
-		referer, err = l.svcCtx.UserModel.FindOneByReferCode(l.ctx, req.Invite)
+		referer, err = l.svcCtx.Store.User().FindOneByReferCode(l.ctx, req.Invite)
 		if err != nil {
 			l.Errorw("FindOneByReferCode Error", logger.Field("error", err))
 			return nil, errors.Wrapf(xerr.NewErrCode(xerr.InviteCodeError), "invite code is invalid")
@@ -105,7 +107,9 @@ func (l *TelephoneUserRegisterLogic) TelephoneUserRegister(req *types.TelephoneR
 	// Generate password
 	pwd := tool.EncodePassWord(req.Password)
 	userInfo := &user.User{
-		Password: pwd,
+		Password:          pwd,
+		Algo:              "default",
+		OnlyFirstPurchase: &l.svcCtx.Config.Invite.OnlyFirstPurchase,
 		AuthMethods: []user.AuthMethods{
 			{
 				AuthType:       "mobile",
@@ -117,25 +121,47 @@ func (l *TelephoneUserRegisterLogic) TelephoneUserRegister(req *types.TelephoneR
 	if referer != nil {
 		userInfo.RefererId = referer.Id
 	}
-	err = l.svcCtx.UserModel.Transaction(l.ctx, func(db *gorm.DB) error {
+	var trialSubscribe *user.Subscribe
+	err = l.svcCtx.Store.InTx(l.ctx, func(store repository.Store) error {
 		// Save user information
-		if err := db.Create(userInfo).Error; err != nil {
+		if err := store.User().Insert(l.ctx, userInfo); err != nil {
 			return err
 		}
 		// Generate ReferCode
 		userInfo.ReferCode = uuidx.UserInviteCode(userInfo.Id)
 		// Update ReferCode
-		if err := db.Model(&user.User{}).Where("id = ?", userInfo.Id).Update("refer_code", userInfo.ReferCode).Error; err != nil {
+		if err := store.User().Update(l.ctx, userInfo); err != nil {
 			return err
 		}
 		if l.svcCtx.Config.Register.EnableTrial {
 			// Active trial
-			if err = l.activeTrial(userInfo.Id); err != nil {
+			trialSubscribe, err = l.activeTrial(store, userInfo.Id)
+			if err != nil {
 				return err
 			}
 		}
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	clearTrialSubscribeCache(l.ctx, l.svcCtx, trialSubscribe)
+
+	// Bind device to user if identifier is provided
+	if req.Identifier != "" {
+		bindLogic := NewBindDeviceLogic(l.ctx, l.svcCtx)
+		if err := bindLogic.BindDeviceToUser(req.Identifier, req.IP, req.UserAgent, userInfo.Id); err != nil {
+			l.Errorw("failed to bind device to user",
+				logger.Field("user_id", userInfo.Id),
+				logger.Field("identifier", req.Identifier),
+				logger.Field("error", err.Error()),
+			)
+			// Don't fail register if device binding fails, just log the error
+		}
+	}
+	if l.ctx.Value(constant.LoginType) != nil {
+		req.LoginType = l.ctx.Value(constant.LoginType).(string)
+	}
 	// Generate session id
 	sessionId := uuidx.NewUUID().String()
 	// Generate token
@@ -145,6 +171,7 @@ func (l *TelephoneUserRegisterLogic) TelephoneUserRegister(req *types.TelephoneR
 		l.svcCtx.Config.JwtAuth.AccessExpire,
 		jwt.WithOption("UserId", userInfo.Id),
 		jwt.WithOption("SessionId", sessionId),
+		jwt.WithOption("LoginType", req.LoginType),
 	)
 	if err != nil {
 		l.Logger.Error("[UserLogin] token generate error", logger.Field("error", err.Error()))
@@ -154,15 +181,62 @@ func (l *TelephoneUserRegisterLogic) TelephoneUserRegister(req *types.TelephoneR
 	if err = l.svcCtx.Redis.Set(l.ctx, sessionIdCacheKey, userInfo.Id, time.Duration(l.svcCtx.Config.JwtAuth.AccessExpire)*time.Second).Err(); err != nil {
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "set session id error: %v", err.Error())
 	}
+
+	defer func() {
+		if token != "" && userInfo.Id != 0 {
+			loginLog := log.Login{
+				Method:    "mobile",
+				LoginIP:   req.IP,
+				UserAgent: req.UserAgent,
+				Success:   token != "",
+				Timestamp: time.Now().UnixMilli(),
+			}
+			content, _ := loginLog.Marshal()
+			if err := l.svcCtx.Store.Log().Insert(l.ctx, &log.SystemLog{
+				Id:       0,
+				Type:     log.TypeLogin.Uint8(),
+				Date:     time.Now().Format("2006-01-02"),
+				ObjectID: userInfo.Id,
+				Content:  string(content),
+			}); err != nil {
+				l.Errorw("failed to insert login log",
+					logger.Field("user_id", userInfo.Id),
+					logger.Field("ip", req.IP),
+					logger.Field("error", err.Error()),
+				)
+			}
+
+			// Register log
+			registerLog := log.Register{
+				AuthMethod: "mobile",
+				Identifier: phoneNumber,
+				RegisterIP: req.IP,
+				UserAgent:  req.UserAgent,
+				Timestamp:  time.Now().UnixMilli(),
+			}
+			content, _ = registerLog.Marshal()
+			if err := l.svcCtx.Store.Log().Insert(l.ctx, &log.SystemLog{
+				Type:     log.TypeRegister.Uint8(),
+				ObjectID: userInfo.Id,
+				Date:     time.Now().Format("2006-01-02"),
+				Content:  string(content),
+			}); err != nil {
+				l.Errorw("failed to insert login log",
+					logger.Field("user_id", userInfo.Id),
+					logger.Field("ip", req.IP),
+					logger.Field("error", err.Error()))
+			}
+		}
+	}()
 	return &types.LoginResponse{
 		Token: token,
 	}, nil
 }
 
-func (l *TelephoneUserRegisterLogic) activeTrial(uid int64) error {
-	sub, err := l.svcCtx.SubscribeModel.FindOne(l.ctx, l.svcCtx.Config.Register.TrialSubscribe)
+func (l *TelephoneUserRegisterLogic) activeTrial(store repository.Store, uid int64) (*user.Subscribe, error) {
+	sub, err := store.Subscribe().FindOne(l.ctx, l.svcCtx.Config.Register.TrialSubscribe)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	userSub := &user.Subscribe{
 		Id:          0,
@@ -174,9 +248,9 @@ func (l *TelephoneUserRegisterLogic) activeTrial(uid int64) error {
 		Traffic:     sub.Traffic,
 		Download:    0,
 		Upload:      0,
-		Token:       uuidx.SubscribeToken(fmt.Sprintf("Trial-%v", uid)),
+		Token:       uuidx.SubscribeToken(fmt.Sprintf("Trial-%v-%s", uid, uuidx.NewUUID().String())),
 		UUID:        uuidx.NewUUID().String(),
 		Status:      1,
 	}
-	return l.svcCtx.UserModel.InsertSubscribe(l.ctx, userSub)
+	return userSub, store.User().InsertSubscribe(l.ctx, userSub)
 }

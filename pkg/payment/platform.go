@@ -9,10 +9,12 @@ const (
 	AlipayF2F
 	EPay
 	Balance
-	UNSUPPORTED
+	CryptoSaaS
+	UNSUPPORTED Platform = -1
 )
 
 var platformNames = map[string]Platform{
+	"CryptoSaaS":  CryptoSaaS,
 	"Stripe":      Stripe,
 	"AlipayF2F":   AlipayF2F,
 	"EPay":        EPay,
@@ -63,9 +65,19 @@ func GetSupportedPlatforms() []types.PlatformInfo {
 			Platform:    EPay.String(),
 			PlatformUrl: "",
 			PlatformFieldDescription: map[string]string{
-				"pid": "PID",
-				"url": "URL",
-				"key": "Key",
+				"pid":  "PID",
+				"url":  "URL",
+				"key":  "Key",
+				"type": "Type",
+			},
+		},
+		{
+			Platform:    CryptoSaaS.String(),
+			PlatformUrl: "https://t.me/CryptoSaaSBot",
+			PlatformFieldDescription: map[string]string{
+				"endpoint":   "API Endpoint",
+				"account_id": "Account ID",
+				"secret_key": "Secret Key",
 			},
 		},
 	}

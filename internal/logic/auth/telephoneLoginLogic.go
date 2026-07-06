@@ -9,7 +9,7 @@ import (
 
 	"github.com/perfect-panel/server/internal/config"
 	"github.com/perfect-panel/server/internal/logic/common"
-	"github.com/perfect-panel/server/internal/model/user"
+	"github.com/perfect-panel/server/internal/model/log"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/constant"
@@ -47,36 +47,49 @@ func (l *TelephoneLoginLogic) TelephoneLogin(req *types.TelephoneLoginRequest, r
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.SmsNotEnabled), "sms login is not enabled")
 	}
 	loginStatus := false
-	var userInfo *user.User
+
+	authMethodInfo, err := l.svcCtx.Store.User().FindUserAuthMethodByOpenID(l.ctx, "mobile", phoneNumber)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.Wrapf(xerr.NewErrCode(xerr.UserNotExist), "user telephone not exist: %v", req.Telephone)
+		}
+		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "query user info failed: %v", err.Error())
+	}
+
+	userInfo, err := l.svcCtx.Store.User().FindOne(l.ctx, authMethodInfo.UserId)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.Wrapf(xerr.NewErrCode(xerr.UserNotExist), "user telephone not exist: %v", req.Telephone)
+		}
+		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "query user info failed: %v", err.Error())
+	}
+
 	// Record login status
 	defer func(svcCtx *svc.ServiceContext) {
 		if userInfo.Id != 0 {
-			if err := svcCtx.UserModel.InsertLoginLog(l.ctx, &user.LoginLog{
-				UserId:    userInfo.Id,
+			loginLog := log.Login{
+				Method:    "mobile",
 				LoginIP:   ip,
 				UserAgent: r.UserAgent(),
-				Success:   &loginStatus,
+				Success:   loginStatus,
+				Timestamp: time.Now().UnixMilli(),
+			}
+			content, _ := loginLog.Marshal()
+			if err := l.svcCtx.Store.Log().Insert(l.ctx, &log.SystemLog{
+				Id:       0,
+				Type:     log.TypeLogin.Uint8(),
+				Date:     time.Now().Format("2006-01-02"),
+				ObjectID: userInfo.Id,
+				Content:  string(content),
 			}); err != nil {
-				l.Logger.Error("[UserLogin] insert login log error", logger.Field("error", err.Error()))
+				l.Errorw("failed to insert login log",
+					logger.Field("user_id", userInfo.Id),
+					logger.Field("ip", req.IP),
+					logger.Field("error", err.Error()),
+				)
 			}
 		}
 	}(l.svcCtx)
-
-	authMethodInfo, err := l.svcCtx.UserModel.FindUserAuthMethodByOpenID(l.ctx, "mobile", phoneNumber)
-	if err != nil {
-		if errors.As(err, gorm.ErrRecordNotFound) {
-			return nil, errors.Wrapf(xerr.NewErrCode(xerr.UserNotExist), "user telephone not exist: %v", req.Telephone)
-		}
-		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "query user info failed: %v", err.Error())
-	}
-
-	userInfo, err = l.svcCtx.UserModel.FindOne(l.ctx, authMethodInfo.UserId)
-	if err != nil {
-		if errors.As(err, gorm.ErrRecordNotFound) {
-			return nil, errors.Wrapf(xerr.NewErrCode(xerr.UserNotExist), "user telephone not exist: %v", req.Telephone)
-		}
-		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "query user info failed: %v", err.Error())
-	}
 
 	if req.Password == "" && req.TelephoneCode == "" {
 		return nil, xerr.NewErrCodeMsg(xerr.InvalidParams, "password and telephone code is empty")
@@ -84,7 +97,7 @@ func (l *TelephoneLoginLogic) TelephoneLogin(req *types.TelephoneLoginRequest, r
 
 	if req.TelephoneCode == "" {
 		// Verify password
-		if !tool.VerifyPassWord(req.Password, userInfo.Password) {
+		if !tool.MultiPasswordVerify(userInfo.Algo, userInfo.Salt, req.Password, userInfo.Password) {
 			return nil, errors.Wrapf(xerr.NewErrCode(xerr.UserPasswordError), "user password")
 		}
 	} else {
@@ -110,6 +123,23 @@ func (l *TelephoneLoginLogic) TelephoneLogin(req *types.TelephoneLoginRequest, r
 		l.svcCtx.Redis.Del(l.ctx, cacheKey)
 	}
 
+	// Bind device to user if identifier is provided
+	if req.Identifier != "" {
+		bindLogic := NewBindDeviceLogic(l.ctx, l.svcCtx)
+		if err := bindLogic.BindDeviceToUser(req.Identifier, req.IP, req.UserAgent, userInfo.Id); err != nil {
+			l.Errorw("failed to bind device to user",
+				logger.Field("user_id", userInfo.Id),
+				logger.Field("identifier", req.Identifier),
+				logger.Field("error", err.Error()),
+			)
+			// Don't fail login if device binding fails, just log the error
+		}
+	}
+
+	if l.ctx.Value(constant.LoginType) != nil {
+		req.LoginType = l.ctx.Value(constant.LoginType).(string)
+	}
+
 	// Generate session id
 	sessionId := uuidx.NewUUID().String()
 	// Generate token
@@ -119,6 +149,7 @@ func (l *TelephoneLoginLogic) TelephoneLogin(req *types.TelephoneLoginRequest, r
 		l.svcCtx.Config.JwtAuth.AccessExpire,
 		jwt.WithOption("UserId", userInfo.Id),
 		jwt.WithOption("SessionId", sessionId),
+		jwt.WithOption("LoginType", req.LoginType),
 	)
 	if err != nil {
 		l.Logger.Error("[UserLogin] token generate error", logger.Field("error", err.Error()))

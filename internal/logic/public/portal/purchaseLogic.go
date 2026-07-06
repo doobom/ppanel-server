@@ -6,18 +6,18 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/perfect-panel/server/pkg/payment"
-
-	"github.com/perfect-panel/server/pkg/constant"
-
-	"github.com/hibiken/asynq"
 	"github.com/perfect-panel/server/internal/model/order"
+	"github.com/perfect-panel/server/internal/repository"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/internal/types"
+	"github.com/perfect-panel/server/pkg/constant"
 	"github.com/perfect-panel/server/pkg/logger"
+	"github.com/perfect-panel/server/pkg/payment"
 	"github.com/perfect-panel/server/pkg/tool"
 	"github.com/perfect-panel/server/pkg/xerr"
 	queue "github.com/perfect-panel/server/queue/types"
+
+	"github.com/hibiken/asynq"
 	"github.com/pkg/errors"
 	"gorm.io/gorm"
 )
@@ -43,7 +43,7 @@ const (
 
 func (l *PurchaseLogic) Purchase(req *types.PortalPurchaseRequest) (resp *types.PortalPurchaseResponse, err error) {
 	// find user auth
-	userAuth, err := l.svcCtx.UserModel.FindUserAuthMethodByOpenID(l.ctx, req.AuthType, req.Identifier)
+	userAuth, err := l.svcCtx.Store.User().FindUserAuthMethodByOpenID(l.ctx, req.AuthType, req.Identifier)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "find user auth error: %v", err.Error())
 	}
@@ -51,11 +51,17 @@ func (l *PurchaseLogic) Purchase(req *types.PortalPurchaseRequest) (resp *types.
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.UserExist), "user already exists")
 	}
 	// find subscribe plan
-	sub, err := l.svcCtx.SubscribeModel.FindOne(l.ctx, req.SubscribeId)
+	sub, err := l.svcCtx.Store.Subscribe().FindOne(l.ctx, req.SubscribeId)
 	if err != nil {
 		l.Errorw("[Purchase] Database query error", logger.Field("error", err.Error()), logger.Field("subscribe_id", req.SubscribeId))
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "find subscribe error: %v", err.Error())
 	}
+
+	// check subscribe plan stock
+	if sub.Inventory == 0 {
+		return nil, errors.Wrapf(xerr.NewErrCode(xerr.SubscribeOutOfStock), "subscribe out of stock")
+	}
+
 	// check subscribe plan status
 	if !*sub.Sell {
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "subscribe not sell")
@@ -74,16 +80,25 @@ func (l *PurchaseLogic) Purchase(req *types.PortalPurchaseRequest) (resp *types.
 	var couponAmount int64 = 0
 	// Calculate the coupon deduction
 	if req.Coupon != "" {
-		couponInfo, err := l.svcCtx.CouponModel.FindOneByCode(l.ctx, req.Coupon)
+		couponInfo, err := l.svcCtx.Store.Coupon().FindOneByCode(l.ctx, req.Coupon)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, errors.Wrapf(xerr.NewErrCode(xerr.CouponNotExist), "coupon not found")
 			}
 			return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "find coupon error: %v", err.Error())
 		}
-		if couponInfo.Count <= couponInfo.UsedCount {
+		if err := ensureCouponEnabled(couponInfo); err != nil {
+			return nil, err
+		}
+		if couponInfo.Count != 0 && couponInfo.Count <= couponInfo.UsedCount {
 			return nil, errors.Wrapf(xerr.NewErrCode(xerr.CouponInsufficientUsage), "coupon used")
 		}
+		// Check expiration time
+		expireTime := time.Unix(couponInfo.ExpireTime, 0)
+		if time.Now().After(expireTime) {
+			return nil, errors.Wrapf(xerr.NewErrCode(xerr.CouponExpired), "coupon expired")
+		}
+
 		couponSub := tool.StringToInt64Slice(couponInfo.Subscribe)
 		if len(couponSub) > 0 && !tool.Contains(couponSub, req.SubscribeId) {
 			return nil, errors.Wrapf(xerr.NewErrCode(xerr.CouponNotApplicable), "coupon not match")
@@ -93,9 +108,8 @@ func (l *PurchaseLogic) Purchase(req *types.PortalPurchaseRequest) (resp *types.
 	}
 	// Calculate the handling fee
 	amount -= couponAmount
-	var deductionAmount int64
 	// find payment method
-	paymentConfig, err := l.svcCtx.PaymentModel.FindOne(l.ctx, req.Payment)
+	paymentConfig, err := l.svcCtx.Store.Payment().FindOne(l.ctx, req.Payment)
 	if err != nil {
 		l.Logger.Error("[Purchase] Database query error", logger.Field("error", err.Error()), logger.Field("payment", req.Payment))
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.PaymentMethodNotFound), "find payment method error: %v", err.Error())
@@ -118,7 +132,7 @@ func (l *PurchaseLogic) Purchase(req *types.PortalPurchaseRequest) (resp *types.
 		Price:          price,
 		Amount:         amount,
 		Discount:       discountAmount,
-		GiftAmount:     deductionAmount,
+		GiftAmount:     0,
 		Coupon:         req.Coupon,
 		CouponDiscount: couponAmount,
 		PaymentId:      req.Payment,
@@ -129,7 +143,7 @@ func (l *PurchaseLogic) Purchase(req *types.PortalPurchaseRequest) (resp *types.
 		SubscribeId:    req.SubscribeId,
 	}
 	// save order
-	err = l.svcCtx.DB.Transaction(func(tx *gorm.DB) error {
+	err = l.svcCtx.Store.InTx(l.ctx, func(store repository.Store) error {
 		// save guest order and user information
 		tempOrder := constant.TemporaryOrderInfo{
 			OrderNo:    orderInfo.OrderNo,
@@ -138,13 +152,25 @@ func (l *PurchaseLogic) Purchase(req *types.PortalPurchaseRequest) (resp *types.
 			Password:   req.Password,
 			InviteCode: req.InviteCode,
 		}
-		if _, err = l.svcCtx.Redis.Set(l.ctx, fmt.Sprintf(constant.TempOrderCacheKey, orderInfo.OrderNo), tempOrder.Marshal(), CloseOrderTimeMinutes*time.Minute).Result(); err != nil {
+		content, _ := tempOrder.Marshal()
+
+		if _, err = l.svcCtx.Redis.Set(l.ctx, fmt.Sprintf(constant.TempOrderCacheKey, orderInfo.OrderNo), string(content), 24*time.Hour).Result(); err != nil {
 			l.Errorw("[Purchase] Redis set error", logger.Field("error", err.Error()), logger.Field("order_no", orderInfo.OrderNo))
 			return err
 		}
 		l.Infow("[Purchase] Guest order", logger.Field("order_no", orderInfo.OrderNo), logger.Field("identifier", req.Identifier))
+
+		// Decrease subscribe plan stock
+		if sub.Inventory != -1 {
+			sub.Inventory--
+			if e := store.Subscribe().Update(l.ctx, sub); e != nil {
+				l.Errorw("[Purchase] Database update error", logger.Field("error", e.Error()), logger.Field("subscribe_id", sub.Id))
+				return e
+			}
+		}
+
 		// save guest order
-		if err := l.svcCtx.OrderModel.Insert(l.ctx, orderInfo, tx); err != nil {
+		if err = store.Order().Insert(l.ctx, orderInfo); err != nil {
 			return err
 		}
 		return nil

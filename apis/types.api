@@ -14,6 +14,8 @@ type (
 		Avatar                string           `json:"avatar"`
 		Balance               int64            `json:"balance"`
 		Commission            int64            `json:"commission"`
+		ReferralPercentage    uint8            `json:"referral_percentage"`
+		OnlyFirstPurchase     bool             `json:"only_first_purchase"`
 		GiftAmount            int64            `json:"gift_amount"`
 		Telegram              int64            `json:"telegram"`
 		ReferCode             string           `json:"refer_code"`
@@ -26,10 +28,10 @@ type (
 		EnableTradeNotify     bool             `json:"enable_trade_notify"`
 		AuthMethods           []UserAuthMethod `json:"auth_methods"`
 		UserDevices           []UserDevice     `json:"user_devices"`
+		Rules                 []string         `json:"rules"`
 		CreatedAt             int64            `json:"created_at"`
 		UpdatedAt             int64            `json:"updated_at"`
 		DeletedAt             int64            `json:"deleted_at,omitempty"`
-		IsDel                 bool             `json:"is_del,omitempty"`
 	}
 	Follow {
 		Id        int64  `json:"id"`
@@ -63,6 +65,9 @@ type (
 		SubscribePath   string `json:"subscribe_path"`
 		SubscribeDomain string `json:"subscribe_domain"`
 		PanDomain       bool   `json:"pan_domain"`
+		UserAgentLimit  bool   `json:"user_agent_limit"`
+		UserAgentList   string `json:"user_agent_list"`
+		ShowTutorial    bool   `json:"show_tutorial"`
 	}
 	VerifyCodeConfig {
 		VerifyCodeExpireTime int64 `json:"verify_code_expire_time"`
@@ -111,6 +116,7 @@ type (
 	AuthConfig {
 		Mobile   MobileAuthenticateConfig `json:"mobile"`
 		Email    EmailAuthticateConfig    `json:"email"`
+		Device   DeviceAuthticateConfig   `json:"device"`
 		Register PubilcRegisterConfig     `json:"register"`
 	}
 	PubilcRegisterConfig {
@@ -130,6 +136,12 @@ type (
 		EnableDomainSuffix bool   `json:"enable_domain_suffix"`
 		DomainSuffixList   string `json:"domain_suffix_list"`
 	}
+	DeviceAuthticateConfig {
+		Enable         bool `json:"enable"`
+		ShowAds        bool `json:"show_ads"`
+		EnableSecurity bool `json:"enable_security"`
+		OnlyRealDevice bool `json:"only_real_device"`
+	}
 	RegisterConfig {
 		StopRegister            bool   `json:"stop_register"`
 		EnableTrial             bool   `json:"enable_trial"`
@@ -148,9 +160,50 @@ type (
 		EnableResetPasswordVerify bool   `json:"enable_reset_password_verify"`
 	}
 	NodeConfig {
-		NodeSecret       string `json:"node_secret"`
-		NodePullInterval int64  `json:"node_pull_interval"`
-		NodePushInterval int64  `json:"node_push_interval"`
+		NodeSecret             string         `json:"node_secret"`
+		NodePullInterval       int64          `json:"node_pull_interval"`
+		NodePushInterval       int64          `json:"node_push_interval"`
+		TrafficReportThreshold int64          `json:"traffic_report_threshold"`
+		IPStrategy             string         `json:"ip_strategy"`
+		DNS                    []NodeDNS      `json:"dns"`
+		Block                  []string       `json:"block"`
+		Outbound               []NodeOutbound `json:"outbound"`
+	}
+	NodeDNS {
+		Proto   string   `json:"proto"`
+		Address string   `json:"address"`
+		Domains []string `json:"domains"`
+	}
+	NodeOutbound {
+		Name                 string   `json:"name"`
+		Protocol             string   `json:"protocol"`
+		Address              string   `json:"address"`
+		Port                 int64    `json:"port"`
+		User                 string   `json:"user,omitempty"`
+		Password             string   `json:"password"`
+		UUID                 string   `json:"uuid,omitempty"`
+		Cipher               string   `json:"cipher,omitempty"`
+		Security             string   `json:"security,omitempty"`
+		SNI                  string   `json:"sni,omitempty"`
+		AllowInsecure        bool     `json:"allow_insecure,omitempty"`
+		Fingerprint          string   `json:"fingerprint,omitempty"`
+		Transport            string   `json:"transport,omitempty"`
+		Host                 string   `json:"host,omitempty"`
+		Path                 string   `json:"path,omitempty"`
+		ServiceName          string   `json:"service_name,omitempty"`
+		Flow                 string   `json:"flow,omitempty"`
+		UoT                  bool     `json:"uot,omitempty"`
+		UoTVersion           int      `json:"uot_version,omitempty"`
+		CongestionController string   `json:"congestion_controller,omitempty"`
+		UDPStream            bool     `json:"udp_stream,omitempty"`
+		ReduceRtt            bool     `json:"reduce_rtt,omitempty"`
+		Heartbeat            int      `json:"heartbeat,omitempty"`
+		RealityPublicKey     string   `json:"reality_public_key,omitempty"`
+		RealityShortId       string   `json:"reality_short_id,omitempty"`
+		SpiderX              string   `json:"spider_x,omitempty"`
+		Settings             string   `json:"settings,omitempty"`
+		StreamSettings       string   `json:"stream_settings,omitempty"`
+		Rules                []string `json:"rules"`
 	}
 	InviteConfig {
 		ForcedInvite       bool  `json:"forced_invite"`
@@ -175,34 +228,35 @@ type (
 		CurrencySymbol string `json:"currency_symbol"`
 	}
 	SubscribeDiscount {
-		Quantity int64 `json:"quantity"`
-		Discount int64 `json:"discount"`
+		Quantity int64   `json:"quantity"`
+		Discount float64 `json:"discount"`
 	}
 	Subscribe {
-		Id             int64               `json:"id"`
-		Name           string              `json:"name"`
-		Description    string              `json:"description"`
-		UnitPrice      int64               `json:"unit_price"`
-		UnitTime       string              `json:"unit_time"`
-		Discount       []SubscribeDiscount `json:"discount"`
-		Replacement    int64               `json:"replacement"`
-		Inventory      int64               `json:"inventory"`
-		Traffic        int64               `json:"traffic"`
-		SpeedLimit     int64               `json:"speed_limit"`
-		DeviceLimit    int64               `json:"device_limit"`
-		Quota          int64               `json:"quota"`
-		GroupId        int64               `json:"group_id"`
-		ServerGroup    []int64             `json:"server_group"`
-		Server         []int64             `json:"server"`
-		Show           bool                `json:"show"`
-		Sell           bool                `json:"sell"`
-		Sort           int64               `json:"sort"`
-		DeductionRatio int64               `json:"deduction_ratio"`
-		AllowDeduction bool                `json:"allow_deduction"`
-		ResetCycle     int64               `json:"reset_cycle"`
-		RenewalReset   bool                `json:"renewal_reset"`
-		CreatedAt      int64               `json:"created_at"`
-		UpdatedAt      int64               `json:"updated_at"`
+		Id                int64               `json:"id"`
+		Name              string              `json:"name"`
+		Language          string              `json:"language"`
+		Description       string              `json:"description"`
+		UnitPrice         int64               `json:"unit_price"`
+		UnitTime          string              `json:"unit_time"`
+		Discount          []SubscribeDiscount `json:"discount"`
+		Replacement       int64               `json:"replacement"`
+		Inventory         int64               `json:"inventory"`
+		Traffic           int64               `json:"traffic"`
+		SpeedLimit        int64               `json:"speed_limit"`
+		DeviceLimit       int64               `json:"device_limit"`
+		Quota             int64               `json:"quota"`
+		Nodes             []string            `json:"nodes"`
+		NodeTags          []string            `json:"node_tags"`
+		Show              bool                `json:"show"`
+		Sell              bool                `json:"sell"`
+		Sort              int64               `json:"sort"`
+		DeductionRatio    int64               `json:"deduction_ratio"`
+		AllowDeduction    bool                `json:"allow_deduction"`
+		ResetCycle        int64               `json:"reset_cycle"`
+		RenewalReset      bool                `json:"renewal_reset"`
+		ShowOriginalPrice bool                `json:"show_original_price"`
+		CreatedAt         int64               `json:"created_at"`
+		UpdatedAt         int64               `json:"updated_at"`
 	}
 	SubscribeGroup {
 		Id          int64  `json:"id"`
@@ -246,6 +300,14 @@ type (
 		SecurityConfig SecurityConfig `json:"security_config"`
 	}
 	Tuic {
+		Port                 int            `json:"port" validate:"required"`
+		DisableSNI           bool           `json:"disable_sni"`
+		ReduceRtt            bool           `json:"reduce_rtt"`
+		UDPRelayMode         string         `json:"udp_relay_mode"`
+		CongestionController string         `json:"congestion_controller"`
+		SecurityConfig       SecurityConfig `json:"security_config"`
+	}
+	AnyTLS {
 		Port           int            `json:"port" validate:"required"`
 		SecurityConfig SecurityConfig `json:"security_config"`
 	}
@@ -264,37 +326,37 @@ type (
 		Host        string `json:"host"`
 		ServiceName string `json:"service_name"`
 	}
-	Server {
-		Id           int64       `json:"id"`
-		Tags         []string    `json:"tags"`
-		Country      string      `json:"country"`
-		City         string      `json:"city"`
-		Name         string      `json:"name"`
-		ServerAddr   string      `json:"server_addr"`
-		RelayMode    string      `json:"relay_mode"`
-		RelayNode    []NodeRelay `json:"relay_node"`
-		SpeedLimit   int         `json:"speed_limit"`
-		TrafficRatio float32     `json:"traffic_ratio"`
-		GroupId      int64       `json:"group_id"`
-		Protocol     string      `json:"protocol"`
-		Config       interface{} `json:"config"`
-		Enable       *bool       `json:"enable"`
-		CreatedAt    int64       `json:"created_at"`
-		UpdatedAt    int64       `json:"updated_at"`
-		Status       *NodeStatus `json:"status"`
-		Sort         int64       `json:"sort"`
-	}
-	OnlineUser {
-		SID int64  `json:"uid"`
-		IP  string `json:"ip"`
-	}
-	NodeStatus {
-		Online    interface{} `json:"online"`
-		Cpu       float64     `json:"cpu"`
-		Mem       float64     `json:"mem"`
-		Disk      float64     `json:"disk"`
-		UpdatedAt int64       `json:"updated_at"`
-	}
+	// Server {
+	//  Id           int64       `json:"id"`
+	//  Tags         []string    `json:"tags"`
+	//  Country      string      `json:"country"`
+	//  City         string      `json:"city"`
+	//  Name         string      `json:"name"`
+	//  ServerAddr   string      `json:"server_addr"`
+	//  RelayMode    string      `json:"relay_mode"`
+	//  RelayNode    []NodeRelay `json:"relay_node"`
+	//  SpeedLimit   int         `json:"speed_limit"`
+	//  TrafficRatio float32     `json:"traffic_ratio"`
+	//  GroupId      int64       `json:"group_id"`
+	//  Protocol     string      `json:"protocol"`
+	//  Config       interface{} `json:"config"`
+	//  Enable       *bool       `json:"enable"`
+	//  CreatedAt    int64       `json:"created_at"`
+	//  UpdatedAt    int64       `json:"updated_at"`
+	//  Status       *NodeStatus `json:"status"`
+	//  Sort         int64       `json:"sort"`
+	// }
+	// OnlineUser {
+	//  SID int64  `json:"uid"`
+	//  IP  string `json:"ip"`
+	// }
+	// NodeStatus {
+	//  Online    interface{} `json:"online"`
+	//  Cpu       float64     `json:"cpu"`
+	//  Mem       float64     `json:"mem"`
+	//  Disk      float64     `json:"disk"`
+	//  UpdatedAt int64       `json:"updated_at"`
+	// }
 	ServerGroup {
 		Id          int64  `json:"id"`
 		Name        string `json:"name"`
@@ -311,6 +373,7 @@ type (
 		FeeMode     uint   `json:"fee_mode"`
 		FeePercent  int64  `json:"fee_percent"`
 		FeeAmount   int64  `json:"fee_amount"`
+		Sort        int64  `json:"sort"`
 	}
 	PaymentConfig {
 		Id          int64       `json:"id" validate:"required"`
@@ -323,6 +386,7 @@ type (
 		FeeMode     uint        `json:"fee_mode"`
 		FeePercent  int64       `json:"fee_percent,omitempty"`
 		FeeAmount   int64       `json:"fee_amount,omitempty"`
+		Sort        int64       `json:"sort,omitempty"`
 		Enable      *bool       `json:"enable" validate:"required"`
 	}
 	PaymentMethodDetail {
@@ -336,6 +400,7 @@ type (
 		FeeMode     uint        `json:"fee_mode"`
 		FeePercent  int64       `json:"fee_percent"`
 		FeeAmount   int64       `json:"fee_amount"`
+		Sort        int64       `json:"sort"`
 		Enable      bool        `json:"enable"`
 		NotifyURL   string      `json:"notify_url"`
 	}
@@ -433,17 +498,9 @@ type (
 		Upload      int64     `json:"upload"`
 		Token       string    `json:"token"`
 		Status      uint8     `json:"status"`
+		Short       string    `json:"short"`
 		CreatedAt   int64     `json:"created_at"`
 		UpdatedAt   int64     `json:"updated_at"`
-	}
-	UserBalanceLog {
-		Id        int64 `json:"id"`
-		UserId    int64 `json:"user_id"`
-		Amount    int64 `json:"amount"`
-		Type      uint8 `json:"type"`
-		OrderId   int64 `json:"order_id"`
-		Balance   int64 `json:"balance"`
-		CreatedAt int64 `json:"created_at"`
 	}
 	UserAffiliate {
 		Avatar       string `json:"avatar"`
@@ -464,14 +521,6 @@ type (
 		Host   string `json:"host"`
 		Port   int    `json:"port"`
 		Prefix string `json:"prefix"`
-	}
-	ApplicationConfig {
-		AppId                  int64    `json:"app_id"`
-		EncryptionKey          string   `json:"encryption_key"`
-		EncryptionMethod       string   `json:"encryption_method"`
-		Domains                []string `json:"domains" validate:"required"`
-		StartupPicture         string   `json:"startup_picture"`
-		StartupPictureSkipTime int64    `json:"startup_picture_skip_time"`
 	}
 	UserDevice {
 		Id         int64  `json:"id"`
@@ -507,9 +556,11 @@ type (
 		Id        int64    `json:"id"`
 		Icon      string   `json:"icon"`
 		Name      string   `json:"name" validate:"required"`
+		Type      string   `json:"type"`
 		Tags      []string `json:"tags"`
 		Rules     string   `json:"rules"`
 		Enable    bool     `json:"enable"`
+		Default   bool     `json:"default"`
 		CreatedAt int64    `json:"created_at"`
 		UpdatedAt int64    `json:"updated_at"`
 	}
@@ -520,7 +571,7 @@ type (
 		Token           string `json:"token"`
 		IP              string `json:"ip"`
 		UserAgent       string `json:"user_agent"`
-		CreatedAt       int64  `json:"created_at"`
+		Timestamp       int64  `json:"timestamp"`
 	}
 	UserLoginLog {
 		Id        int64  `json:"id"`
@@ -528,18 +579,17 @@ type (
 		LoginIP   string `json:"login_ip"`
 		UserAgent string `json:"user_agent"`
 		Success   bool   `json:"success"`
-		CreatedAt int64  `json:"created_at"`
+		Timestamp int64  `json:"timestamp"`
 	}
 	MessageLog {
-		Id        int64  `json:"id"`
-		Type      string `json:"type"`
-		Platform  string `json:"platform"`
-		To        string `json:"to"`
-		Subject   string `json:"subject"`
-		Content   string `json:"content"`
-		Status    int    `json:"status"`
-		CreatedAt int64  `json:"created_at"`
-		UpdatedAt int64  `json:"updated_at"`
+		Id        int64       `json:"id"`
+		Type      uint8       `json:"type"`
+		Platform  string      `json:"platform"`
+		To        string      `json:"to"`
+		Subject   string      `json:"subject"`
+		Content   interface{} `json:"content"`
+		Status    uint8       `json:"status"`
+		CreatedAt int64       `json:"created_at"`
 	}
 	Ads {
 		Id          int    `json:"id"`
@@ -557,7 +607,7 @@ type (
 	//public order
 	PurchaseOrderRequest {
 		SubscribeId int64  `json:"subscribe_id"`
-		Quantity    int64  `json:"quantity" validate:"required,gt=0"`
+		Quantity    int64  `json:"quantity" validate:"required,gt=0,lte=1000"`
 		Payment     int64  `json:"payment,omitempty"`
 		Coupon      string `json:"coupon,omitempty"`
 	}
@@ -575,7 +625,7 @@ type (
 	}
 	RenewalOrderRequest {
 		UserSubscribeID int64  `json:"user_subscribe_id"`
-		Quantity        int64  `json:"quantity"`
+		Quantity        int64  `json:"quantity" validate:"lte=1000"`
 		Payment         int64  `json:"payment"`
 		Coupon          string `json:"coupon,omitempty"`
 	}
@@ -590,7 +640,7 @@ type (
 		OrderNo string `json:"order_no"`
 	}
 	RechargeOrderRequest {
-		Amount  int64 `json:"amount"`
+		Amount  int64 `json:"amount" validate:"required,gt=0,lte=2000000000"`
 		Payment int64 `json:"payment"`
 	}
 	RechargeOrderResponse {
@@ -707,12 +757,10 @@ type (
 		Telephone string `json:"telephone"`
 		Address   string `json:"address"`
 	}
-
 	QueryUserAffiliateCountResponse {
 		Registers       int64 `json:"registers"`
 		TotalCommission int64 `json:"total_commission"`
 	}
-
 	AppUserSubcbribe {
 		Id          int64                   `json:"id"`
 		Name        string                  `json:"name"`
@@ -724,7 +772,6 @@ type (
 		ExpireTime  string                  `json:"expire_time"`
 		List        []AppUserSubscbribeNode `json:"list"`
 	}
-
 	AppUserSubscbribeNode {
 		Id           int64    `json:"id"`
 		Name         string   `json:"name"`
@@ -745,5 +792,88 @@ type (
 		Longitude    string   `json:"longitude"`
 		CreatedAt    int64    `json:"created_at"`
 		Download     int64    `json:"download"`
+	}
+	DownloadLink {
+		IOS     string `json:"ios,omitempty"`
+		Android string `json:"android,omitempty"`
+		Windows string `json:"windows,omitempty"`
+		Mac     string `json:"mac,omitempty"`
+		Linux   string `json:"linux,omitempty"`
+		Harmony string `json:"harmony,omitempty"`
+	}
+	ResetSubscribeTrafficLog {
+		Id              int64  `json:"id"`
+		Type            uint16 `json:"type"`
+		UserSubscribeId int64  `json:"user_subscribe_id"`
+		OrderNo         string `json:"order_no,omitempty"`
+		Timestamp       int64  `json:"timestamp"`
+	}
+	BalanceLog {
+		Type      uint16 `json:"type"`
+		UserId    int64  `json:"user_id"`
+		Amount    int64  `json:"amount"`
+		OrderNo   string `json:"order_no,omitempty"`
+		Balance   int64  `json:"balance"`
+		Timestamp int64  `json:"timestamp"`
+	}
+	CommissionLog {
+		Type      uint16 `json:"type"`
+		UserId    int64  `json:"user_id"`
+		Amount    int64  `json:"amount"`
+		OrderNo   string `json:"order_no"`
+		Timestamp int64  `json:"timestamp"`
+	}
+	Protocol {
+		Type                    string  `json:"type"`
+		Port                    uint16  `json:"port"`
+		Enable                  bool    `json:"enable"`
+		Security                string  `json:"security,omitempty"`
+		SNI                     string  `json:"sni,omitempty"`
+		AllowInsecure           bool    `json:"allow_insecure,omitempty"`
+		Fingerprint             string  `json:"fingerprint,omitempty"`
+		RealityServerAddr       string  `json:"reality_server_addr,omitempty"`
+		RealityServerPort       int     `json:"reality_server_port,omitempty"`
+		RealityPrivateKey       string  `json:"reality_private_key,omitempty"`
+		RealityPublicKey        string  `json:"reality_public_key,omitempty"`
+		RealityShortId          string  `json:"reality_short_id,omitempty"`
+		Transport               string  `json:"transport,omitempty"`
+		Host                    string  `json:"host,omitempty"`
+		Path                    string  `json:"path,omitempty"`
+		ServiceName             string  `json:"service_name,omitempty"`
+		Cipher                  string  `json:"cipher,omitempty"`
+		ServerKey               string  `json:"server_key,omitempty"`
+		Flow                    string  `json:"flow,omitempty"`
+		HopPorts                string  `json:"hop_ports,omitempty"`
+		HopInterval             int     `json:"hop_interval,omitempty"`
+		ObfsPassword            string  `json:"obfs_password,omitempty"`
+		DisableSNI              bool    `json:"disable_sni,omitempty"`
+		ReduceRtt               bool    `json:"reduce_rtt,omitempty"`
+		UDPRelayMode            string  `json:"udp_relay_mode,omitempty"`
+		CongestionController    string  `json:"congestion_controller,omitempty"`
+		Multiplex               string  `json:"multiplex,omitempty"` // mux, eg: off/low/medium/high
+		PaddingScheme           string  `json:"padding_scheme,omitempty"` // padding scheme
+		UpMbps                  int     `json:"up_mbps,omitempty"` // upload speed limit
+		DownMbps                int     `json:"down_mbps,omitempty"` // download speed limit
+		Obfs                    string  `json:"obfs,omitempty"` // obfs, 'none', 'http', 'tls'
+		ObfsHost                string  `json:"obfs_host,omitempty"` // obfs host
+		ObfsPath                string  `json:"obfs_path,omitempty"` // obfs path
+		XhttpMode               string  `json:"xhttp_mode,omitempty"` // xhttp mode
+		XhttpExtra              string  `json:"xhttp_extra,omitempty"` // xhttp extra path
+		Encryption              string  `json:"encryption,omitempty"` // encryption，'none', 'mlkem768x25519plus'
+		EncryptionMode          string  `json:"encryption_mode,omitempty"` // encryption mode，'native', 'xorpub', 'random'
+		EncryptionRtt           string  `json:"encryption_rtt,omitempty"` // encryption rtt，'0rtt', '1rtt'
+		EncryptionTicket        string  `json:"encryption_ticket,omitempty"` // encryption ticket
+		EncryptionServerPadding string  `json:"encryption_server_padding,omitempty"` // encryption server padding
+		EncryptionPrivateKey    string  `json:"encryption_private_key,omitempty"` // encryption private key
+		EncryptionClientPadding string  `json:"encryption_client_padding,omitempty"` // encryption client padding
+		EncryptionPassword      string  `json:"encryption_password,omitempty"` // encryption password
+		Ratio                   float64 `json:"ratio,omitempty"` // Traffic ratio, default is 1
+		CertMode                string  `json:"cert_mode,omitempty"` // Certificate mode, `none`｜`http`｜`dns`｜`self`
+		CertDNSProvider         string  `json:"cert_dns_provider,omitempty"` // DNS provider for certificate
+		CertDNSEnv              string  `json:"cert_dns_env,omitempty"` // Environment for DNS provider
+	}
+	// reset user subscribe token
+	ResetUserSubscribeTokenRequest {
+		UserSubscribeId int64 `json:"user_subscribe_id"`
 	}
 )

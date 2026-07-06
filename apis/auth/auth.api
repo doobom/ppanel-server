@@ -11,11 +11,13 @@ info (
 type (
 	// User login request
 	UserLoginRequest {
-		Email     string `json:"email" validate:"required"`
-		Password  string `json:"password" validate:"required"`
-		IP        string `header:"X-Original-Forwarded-For"`
-		UserAgent string `header:"User-Agent"`
-		CfToken   string `json:"cf_token,optional"`
+		Identifier string `json:"identifier"`
+		Email      string `json:"email" validate:"required"`
+		Password   string `json:"password" validate:"required"`
+		IP         string `header:"X-Original-Forwarded-For"`
+		UserAgent  string `header:"User-Agent"`
+		LoginType  string `header:"Login-Type"`
+		CfToken    string `json:"cf_token,optional"`
 	}
 	// Check user is exist request
 	CheckUserRequest {
@@ -27,22 +29,26 @@ type (
 	}
 	// User login response
 	UserRegisterRequest {
-		Email     string `json:"email" validate:"required"`
-		Password  string `json:"password" validate:"required"`
-		Invite    string `json:"invite,optional"`
-		Code      string `json:"code,optional"`
-		IP        string `header:"X-Original-Forwarded-For"`
-		UserAgent string `header:"User-Agent"`
-		CfToken   string `json:"cf_token,optional"`
+		Identifier string `json:"identifier"`
+		Email      string `json:"email" validate:"required"`
+		Password   string `json:"password" validate:"required"`
+		Invite     string `json:"invite,optional"`
+		Code       string `json:"code,optional"`
+		IP         string `header:"X-Original-Forwarded-For"`
+		UserAgent  string `header:"User-Agent"`
+		LoginType  string `header:"Login-Type"`
+		CfToken    string `json:"cf_token,optional"`
 	}
 	// User login response
 	ResetPasswordRequest {
-		Email     string `json:"email" validate:"required"`
-		Password  string `json:"password" validate:"required"`
-		Code      string `json:"code,optional"`
-		IP        string `header:"X-Original-Forwarded-For"`
-		UserAgent string `header:"User-Agent"`
-		CfToken   string `json:"cf_token,optional"`
+		Identifier string `json:"identifier"`
+		Email      string `json:"email" validate:"required"`
+		Password   string `json:"password" validate:"required"`
+		Code       string `json:"code,optional"`
+		IP         string `header:"X-Original-Forwarded-For"`
+		UserAgent  string `header:"User-Agent"`
+		LoginType  string `header:"Login-Type"`
+		CfToken    string `json:"cf_token,optional"`
 	}
 	LoginResponse {
 		Token string `json:"token"`
@@ -54,19 +60,20 @@ type (
 	OAuthLoginResponse {
 		Redirect string `json:"redirect"`
 	}
-
 	OAuthLoginGetTokenRequest {
 		Method   string      `json:"method" validate:"required"` // google, facebook, apple, telegram, github etc.
 		Callback interface{} `json:"callback" validate:"required"`
 	}
-
 	// login request
 	TelephoneLoginRequest {
+		Identifier        string `json:"identifier"`
 		Telephone         string `json:"telephone" validate:"required"`
 		TelephoneCode     string `json:"telephone_code"`
 		TelephoneAreaCode string `json:"telephone_area_code" validate:"required"`
 		Password          string `json:"password"`
 		IP                string `header:"X-Original-Forwarded-For"`
+		UserAgent         string `header:"User-Agent"`
+		LoginType         string `header:"Login-Type"`
 		CfToken           string `json:"cf_token,optional"`
 	}
 	// Check user is exist request
@@ -80,21 +87,27 @@ type (
 	}
 	// User login response
 	TelephoneRegisterRequest {
+		Identifier        string `json:"identifier"`
 		Telephone         string `json:"telephone" validate:"required"`
 		TelephoneAreaCode string `json:"telephone_area_code" validate:"required"`
 		Password          string `json:"password" validate:"required"`
 		Invite            string `json:"invite,optional"`
 		Code              string `json:"code,optional"`
 		IP                string `header:"X-Original-Forwarded-For"`
+		UserAgent         string `header:"User-Agent"`
+		LoginType         string `header:"Login-Type,optional"`
 		CfToken           string `json:"cf_token,optional"`
 	}
 	// User login response
 	TelephoneResetPasswordRequest {
+		Identifier        string `json:"identifier"`
 		Telephone         string `json:"telephone" validate:"required"`
 		TelephoneAreaCode string `json:"telephone_area_code" validate:"required"`
 		Password          string `json:"password" validate:"required"`
 		Code              string `json:"code,optional"`
 		IP                string `header:"X-Original-Forwarded-For"`
+		UserAgent         string `header:"User-Agent"`
+		LoginType         string `header:"Login-Type,optional"`
 		CfToken           string `json:"cf_token,optional"`
 	}
 	AppleLoginCallbackRequest {
@@ -106,11 +119,18 @@ type (
 		Code  string `form:"code"`
 		State string `form:"state"`
 	}
+	DeviceLoginRequest {
+		Identifier string `json:"identifier" validate:"required"`
+		IP         string `header:"X-Original-Forwarded-For"`
+		UserAgent  string `json:"user_agent" validate:"required"`
+		CfToken    string `json:"cf_token,optional"`
+	}
 )
 
 @server (
-	prefix: v1/auth
-	group:  auth
+	prefix:     v1/auth
+	group:      auth
+	middleware: DeviceMiddleware
 )
 service ppanel {
 	@doc "User login"
@@ -144,6 +164,10 @@ service ppanel {
 	@doc "Reset password"
 	@handler TelephoneResetPassword
 	post /reset/telephone (TelephoneResetPasswordRequest) returns (LoginResponse)
+
+	@doc "Device Login"
+	@handler DeviceLogin
+	post /login/device (DeviceLoginRequest) returns (LoginResponse)
 }
 
 @server (
@@ -163,3 +187,4 @@ service ppanel {
 	@handler AppleLoginCallback
 	post /callback/apple (AppleLoginCallbackRequest)
 }
+

@@ -13,10 +13,11 @@ import "../types.api"
 @server (
 	prefix:     v1/public/announcement
 	group:      public/announcement
-	middleware: AuthMiddleware
+	middleware: AuthMiddleware,DeviceMiddleware
 )
 service ppanel {
 	@doc "Query announcement"
 	@handler QueryAnnouncement
 	get /list (QueryAnnouncementRequest) returns (QueryAnnouncementResponse)
 }
+

@@ -2,7 +2,9 @@ package user
 
 import (
 	"context"
+	"errors"
 
+	"github.com/perfect-panel/server/pkg/logger"
 	"gorm.io/gorm"
 )
 
@@ -31,30 +33,123 @@ func (m *defaultUserModel) FindUserAuthMethodByPlatform(ctx context.Context, use
 }
 
 func (m *defaultUserModel) InsertUserAuthMethods(ctx context.Context, data *AuthMethods, tx ...*gorm.DB) error {
+	u, err := m.FindOne(ctx, data.UserId)
+	if err != nil {
+		return err
+	}
+
 	return m.ExecNoCacheCtx(ctx, func(conn *gorm.DB) error {
 		if len(tx) > 0 {
 			conn = tx[0]
 		}
-		return conn.Model(&AuthMethods{}).Create(data).Error
+		if err = conn.Model(&AuthMethods{}).Create(data).Error; err != nil {
+			return err
+		}
+		return m.ClearUserCache(ctx, u)
 	})
 }
 
 func (m *defaultUserModel) UpdateUserAuthMethods(ctx context.Context, data *AuthMethods, tx ...*gorm.DB) error {
+	u, err := m.FindOne(ctx, data.UserId)
+	if err != nil {
+		return err
+	}
+
 	return m.ExecNoCacheCtx(ctx, func(conn *gorm.DB) error {
 		if len(tx) > 0 {
 			conn = tx[0]
 		}
-		return conn.Model(&AuthMethods{}).Where("user_id = ? AND auth_type = ?", data.UserId, data.AuthType).Save(data).Error
+		err = conn.Model(&AuthMethods{}).Where("user_id = ? AND auth_type = ?", data.UserId, data.AuthType).Save(data).Error
+		if err != nil {
+			return err
+		}
+		return m.ClearUserCache(ctx, u)
 	})
 }
 
 func (m *defaultUserModel) DeleteUserAuthMethods(ctx context.Context, userId int64, platform string, tx ...*gorm.DB) error {
+	u, err := m.FindOne(ctx, userId)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err = m.ClearUserCache(context.Background(), u); err != nil {
+			logger.Errorf("[UserModel] clear user cache failed: %v", err.Error())
+		}
+	}()
 	return m.ExecNoCacheCtx(ctx, func(conn *gorm.DB) error {
 		if len(tx) > 0 {
 			conn = tx[0]
 		}
 		return conn.Model(&AuthMethods{}).Where("user_id = ? AND auth_type = ?", userId, platform).Delete(&AuthMethods{}).Error
 	})
+}
+
+func (m *defaultUserModel) UpdateUserAuthMethodOwner(ctx context.Context, authType, identifier string, userId int64, tx ...*gorm.DB) error {
+	authMethod, err := m.FindUserAuthMethodByOpenID(ctx, authType, identifier)
+	if err != nil {
+		return err
+	}
+	oldUser, err := m.FindOne(ctx, authMethod.UserId)
+	if err != nil {
+		return err
+	}
+	newUser, err := m.FindOne(ctx, userId)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err = m.ClearUserCache(context.Background(), oldUser, newUser); err != nil {
+			logger.Errorf("[UserModel] clear user cache failed: %v", err.Error())
+		}
+	}()
+	return m.ExecNoCacheCtx(ctx, func(conn *gorm.DB) error {
+		if len(tx) > 0 {
+			conn = tx[0]
+		}
+		return conn.Model(&AuthMethods{}).
+			Where("auth_type = ? AND auth_identifier = ?", authType, identifier).
+			Update("user_id", userId).Error
+	})
+}
+
+func (m *defaultUserModel) DeleteUserAuthMethodByIdentifier(ctx context.Context, authType, identifier string, tx ...*gorm.DB) error {
+	authMethod, err := m.FindUserAuthMethodByOpenID(ctx, authType, identifier)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return err
+	}
+	u, err := m.FindOne(ctx, authMethod.UserId)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err = m.ClearUserCache(context.Background(), u); err != nil {
+			logger.Errorf("[UserModel] clear user cache failed: %v", err.Error())
+		}
+	}()
+	return m.ExecNoCacheCtx(ctx, func(conn *gorm.DB) error {
+		if len(tx) > 0 {
+			conn = tx[0]
+		}
+		return conn.Model(&AuthMethods{}).
+			Where("auth_type = ? AND auth_identifier = ?", authType, identifier).
+			Delete(&AuthMethods{}).Error
+	})
+}
+
+func (m *defaultUserModel) UpsertUserAuthMethod(ctx context.Context, data *AuthMethods) error {
+	current, err := m.FindUserAuthMethodByPlatform(ctx, data.UserId, data.AuthType)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return m.InsertUserAuthMethods(ctx, data)
+		}
+		return err
+	}
+	current.AuthIdentifier = data.AuthIdentifier
+	return m.UpdateUserAuthMethods(ctx, current)
 }
 
 func (m *defaultUserModel) FindUserAuthMethodByUserId(ctx context.Context, method string, userId int64) (*AuthMethods, error) {

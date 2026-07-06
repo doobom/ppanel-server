@@ -3,6 +3,7 @@ package subscribe
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/internal/types"
@@ -28,7 +29,7 @@ func NewGetSubscribeDetailsLogic(ctx context.Context, svcCtx *svc.ServiceContext
 }
 
 func (l *GetSubscribeDetailsLogic) GetSubscribeDetails(req *types.GetSubscribeDetailsRequest) (resp *types.Subscribe, err error) {
-	sub, err := l.svcCtx.SubscribeModel.FindOne(l.ctx, req.Id)
+	sub, err := l.svcCtx.Store.Subscribe().FindOne(l.ctx, req.Id)
 	if err != nil {
 		l.Logger.Error("[GetSubscribeDetailsLogic] get subscribe details failed: ", logger.Field("error", err.Error()))
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "get subscribe details failed: %v", err.Error())
@@ -41,7 +42,7 @@ func (l *GetSubscribeDetailsLogic) GetSubscribeDetails(req *types.GetSubscribeDe
 			l.Logger.Error("[GetSubscribeDetailsLogic] JSON unmarshal failed: ", logger.Field("error", err.Error()), logger.Field("discount", sub.Discount))
 		}
 	}
-	resp.Server = tool.StringToInt64Slice(sub.Server)
-	resp.ServerGroup = tool.StringToInt64Slice(sub.ServerGroup)
+	resp.Nodes = types.StringInt64Slice(tool.StringToInt64Slice(sub.Nodes))
+	resp.NodeTags = strings.Split(sub.NodeTags, ",")
 	return resp, nil
 }

@@ -9,12 +9,13 @@ func StartInitSystemConfig(svc *svc.ServiceContext) {
 	Site(svc)
 	Node(svc)
 	Email(svc)
+	Device(svc)
 	Invite(svc)
 	Verify(svc)
 	Subscribe(svc)
 	Register(svc)
 	Mobile(svc)
-	TrafficDataToRedis(svc)
+	Currency(svc)
 	if !svc.Config.Debug {
 		Telegram(svc)
 	}

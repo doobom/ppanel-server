@@ -13,7 +13,7 @@ import (
 
 func CalculateRemainingAmount(ctx context.Context, svcCtx *svc.ServiceContext, userSubscribeId int64) (int64, error) {
 	// Find User Subscribe
-	userSubscribe, err := svcCtx.UserModel.FindOneUserSubscribe(ctx, userSubscribeId)
+	userSubscribe, err := svcCtx.Store.User().FindOneUserSubscribe(ctx, userSubscribeId)
 	if err != nil {
 		logger.WithContext(ctx).Error("[func CalculateRemainingAmount(ctx context.Context, svcCtx *svc.ServiceContext, userSubscribeId int64) (int64, error) {\n] FindOneUserSubscribe", logger.Field("err", err.Error()), logger.Field("id", userSubscribeId))
 		return 0, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "FindOneUserSubscribe failed, id: %d", userSubscribeId)
@@ -29,7 +29,7 @@ func CalculateRemainingAmount(ctx context.Context, svcCtx *svc.ServiceContext, u
 		return 0, errors.New("The subscription package is not in use")
 	}
 	// Find Order Details
-	orderDetails, err := svcCtx.OrderModel.FindOneDetails(ctx, userSubscribe.OrderId)
+	orderDetails, err := svcCtx.Store.Order().FindOneDetails(ctx, userSubscribe.OrderId)
 	if err != nil {
 		logger.WithContext(ctx).Error("[PreUnsubscribe] FindOneDetails", logger.Field("err", err.Error()), logger.Field("id", userSubscribe.OrderId))
 		return 0, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "FindOneDetails failed, id: %d", userSubscribe.OrderId)
@@ -38,6 +38,7 @@ func CalculateRemainingAmount(ctx context.Context, svcCtx *svc.ServiceContext, u
 	orderQuantity := orderDetails.Quantity
 	// Calculate Order Amount
 	orderAmount := orderDetails.Amount + orderDetails.GiftAmount
+
 	if len(orderDetails.SubOrders) > 0 {
 		for _, subOrder := range orderDetails.SubOrders {
 			if subOrder.Status == 2 || subOrder.Status == 5 {
@@ -47,7 +48,7 @@ func CalculateRemainingAmount(ctx context.Context, svcCtx *svc.ServiceContext, u
 		}
 	}
 	// Calculate Remaining Amount
-	remainingAmount := deduction.CalculateRemainingAmount(
+	remainingAmount, err := deduction.CalculateRemainingAmount(
 		deduction.Subscribe{
 			StartTime:      userSubscribe.StartTime,
 			ExpireTime:     userSubscribe.ExpireTime,
@@ -64,5 +65,8 @@ func CalculateRemainingAmount(ctx context.Context, svcCtx *svc.ServiceContext, u
 			Quantity: orderQuantity,
 		},
 	)
+	if err != nil {
+		return 0, errors.Wrapf(xerr.NewErrCode(500), "CalculateRemainingAmount failed, userSubscribeId: %d, err: %v", userSubscribeId, err)
+	}
 	return remainingAmount, nil
 }

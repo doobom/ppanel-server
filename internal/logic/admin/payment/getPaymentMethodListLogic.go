@@ -3,7 +3,9 @@ package payment
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
+	"github.com/perfect-panel/server/internal/report"
 	paymentPlatform "github.com/perfect-panel/server/pkg/payment"
 
 	"github.com/perfect-panel/server/internal/model/payment"
@@ -30,7 +32,7 @@ func NewGetPaymentMethodListLogic(ctx context.Context, svcCtx *svc.ServiceContex
 }
 
 func (l *GetPaymentMethodListLogic) GetPaymentMethodList(req *types.GetPaymentMethodListRequest) (resp *types.GetPaymentMethodListResponse, err error) {
-	total, list, err := l.svcCtx.PaymentModel.FindListByPage(l.ctx, req.Page, req.Size, &payment.Filter{
+	total, list, err := l.svcCtx.Store.Payment().FindListByPage(l.ctx, req.Page, req.Size, &payment.Filter{
 		Search: req.Search,
 		Mark:   req.Platform,
 		Enable: req.Enable,
@@ -43,29 +45,48 @@ func (l *GetPaymentMethodListLogic) GetPaymentMethodList(req *types.GetPaymentMe
 		Total: total,
 		List:  make([]types.PaymentMethodDetail, len(list)),
 	}
+
+	// gateway mod
+
+	isGatewayMod := report.IsGatewayMode()
+
 	for i, v := range list {
 		config := make(map[string]interface{})
 		_ = json.Unmarshal([]byte(v.Config), &config)
 		notifyUrl := ""
+
 		if paymentPlatform.ParsePlatform(v.Platform) != paymentPlatform.Balance {
+			notifyUrl = v.Domain
 			if v.Domain != "" {
-				notifyUrl = v.Domain + "/v1/notify/" + v.Platform + "/" + v.Token
+				notifyUrl = strings.TrimSuffix(notifyUrl, "/")
+				if isGatewayMod {
+					notifyUrl += "/api/v1/notify/" + v.Platform + "/" + v.Token
+				} else {
+					notifyUrl += "/v1/notify/" + v.Platform + "/" + v.Token
+				}
 			} else {
-				notifyUrl = "https://" + l.svcCtx.Config.Host + "/v1/notify/" + v.Platform + "/" + v.Token
+				notifyUrl += "https://" + l.svcCtx.Config.Host
+				if isGatewayMod {
+					notifyUrl = strings.TrimSuffix(notifyUrl, "/") + "/api/v1/notify/" + v.Platform + "/" + v.Token
+				} else {
+					notifyUrl = strings.TrimSuffix(notifyUrl, "/") + "/v1/notify/" + v.Platform + "/" + v.Token
+				}
 			}
 		}
 		resp.List[i] = types.PaymentMethodDetail{
-			Id:         v.Id,
-			Name:       v.Name,
-			Platform:   v.Platform,
-			Icon:       v.Icon,
-			Domain:     v.Domain,
-			Config:     config,
-			FeeMode:    v.FeeMode,
-			FeePercent: v.FeePercent,
-			FeeAmount:  v.FeeAmount,
-			Enable:     *v.Enable,
-			NotifyURL:  notifyUrl,
+			Id:          v.Id,
+			Name:        v.Name,
+			Platform:    v.Platform,
+			Icon:        v.Icon,
+			Domain:      v.Domain,
+			Config:      config,
+			FeeMode:     v.FeeMode,
+			FeePercent:  v.FeePercent,
+			FeeAmount:   v.FeeAmount,
+			Sort:        v.Sort,
+			Enable:      *v.Enable,
+			NotifyURL:   notifyUrl,
+			Description: v.Description,
 		}
 	}
 	return

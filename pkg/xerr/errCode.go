@@ -18,15 +18,16 @@ const (
 
 // User error
 const (
-	UserExist           uint32 = 20001
-	UserNotExist        uint32 = 20002
-	UserPasswordError   uint32 = 20003
-	UserDisabled        uint32 = 20004
-	InsufficientBalance uint32 = 20005
-	StopRegister        uint32 = 20006
-	TelegramNotBound    uint32 = 20007
-	UserNotBindOauth    uint32 = 20008
-	InviteCodeError     uint32 = 20009
+	UserExist               uint32 = 20001
+	UserNotExist            uint32 = 20002
+	UserPasswordError       uint32 = 20003
+	UserDisabled            uint32 = 20004
+	InsufficientBalance     uint32 = 20005
+	StopRegister            uint32 = 20006
+	TelegramNotBound        uint32 = 20007
+	UserNotBindOauth        uint32 = 20008
+	InviteCodeError         uint32 = 20009
+	UserCommissionNotEnough uint32 = 20010
 )
 
 // Node error
@@ -47,6 +48,7 @@ const (
 	ErrorTokenExpire  uint32 = 40004
 	InvalidAccess     uint32 = 40005
 	InvalidCiphertext uint32 = 40006
+	SecretIsEmpty     uint32 = 40007
 )
 
 //coupon error
@@ -56,6 +58,8 @@ const (
 	CouponAlreadyUsed       uint32 = 50002 // Coupon has already been used
 	CouponNotApplicable     uint32 = 50003 // Coupon does not match the order or conditions
 	CouponInsufficientUsage uint32 = 50004 // Coupon has insufficient remaining uses
+	CouponExpired           uint32 = 50005 // Coupon is expired
+	CouponDisabled          uint32 = 50006 // Coupon is disabled
 )
 
 // Subscribe
@@ -67,6 +71,7 @@ const (
 	SubscribeIsUsedError            uint32 = 60004
 	SingleSubscribeModeExceedsLimit uint32 = 60005
 	SubscribeQuotaLimit             uint32 = 60006
+	SubscribeOutOfStock             uint32 = 60007
 )
 
 // Auth error

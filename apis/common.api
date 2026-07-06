@@ -35,10 +35,6 @@ type (
 	GetTosResponse {
 		TosContent string `json:"tos_content"`
 	}
-	GetAppcationResponse {
-		Config       ApplicationConfig         `json:"config"`
-		Applications []ApplicationResponseInfo `json:"applications"`
-	}
 	// GetCodeRequest Get code request
 	SendCodeRequest {
 		Email string `json:"email" validate:"required"`
@@ -75,24 +71,38 @@ type (
 		Code    string `json:"code" validate:"required"`
 		Type    uint8  `json:"type" validate:"required"`
 	}
-
 	CheckVerificationCodeRespone {
 		Status bool `json:"status"`
+	}
+	SubscribeClient {
+		Id           int64        `json:"id"`
+		Name         string       `json:"name"`
+		Description  string       `json:"description,omitempty"`
+		Icon         string       `json:"icon,omitempty"`
+		Scheme       string       `json:"scheme,omitempty"`
+		IsDefault    bool         `json:"is_default"`
+		DownloadLink DownloadLink `json:"download_link,omitempty"`
+	}
+	GetSubscribeClientResponse {
+		Total int64             `json:"total"`
+		List  []SubscribeClient `json:"list"`
+	}
+	HeartbeatResponse {
+		Status    bool   `json:"status"`
+		Message   string `json:"message,omitempty"`
+		Timestamp int64  `json:"timestamp,omitempty"`
 	}
 )
 
 @server (
-	prefix: v1/common
-	group:  common
+	prefix:     v1/common
+	group:      common
+	middleware: DeviceMiddleware
 )
 service ppanel {
 	@doc "Get global config"
 	@handler GetGlobalConfig
 	get /site/config returns (GetGlobalConfigResponse)
-
-	@doc "Get Tos Content"
-	@handler GetApplication
-	get /application returns (GetAppcationResponse)
 
 	@doc "Get Tos Content"
 	@handler GetTos
@@ -121,4 +131,13 @@ service ppanel {
 	@doc "Check verification code"
 	@handler CheckVerificationCode
 	post /check_verification_code (CheckVerificationCodeRequest) returns (CheckVerificationCodeRespone)
+
+	@doc "Get Client"
+	@handler GetClient
+	get /client returns (GetSubscribeClientResponse)
+
+	@doc "Heartbeat"
+	@handler Heartbeat
+	get /heartbeat returns (HeartbeatResponse)
 }
+

@@ -2,7 +2,9 @@ package common
 
 import (
 	"context"
+	"encoding/json"
 
+	"github.com/perfect-panel/server/internal/report"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/logger"
@@ -29,12 +31,12 @@ func NewGetGlobalConfigLogic(ctx context.Context, svcCtx *svc.ServiceContext) *G
 func (l *GetGlobalConfigLogic) GetGlobalConfig() (resp *types.GetGlobalConfigResponse, err error) {
 	resp = new(types.GetGlobalConfigResponse)
 
-	currencyCfg, err := l.svcCtx.SystemModel.GetCurrencyConfig(l.ctx)
+	currencyCfg, err := l.svcCtx.Store.System().GetCurrencyConfig(l.ctx)
 	if err != nil {
 		l.Logger.Error("[GetGlobalConfigLogic] GetCurrencyConfig error: ", logger.Field("error", err.Error()))
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "GetCurrencyConfig error: %v", err.Error())
 	}
-	verifyCodeCfg, err := l.svcCtx.SystemModel.GetVerifyCodeConfig(l.ctx)
+	verifyCodeCfg, err := l.svcCtx.Store.System().GetVerifyCodeConfig(l.ctx)
 	if err != nil {
 		l.Logger.Error("[GetGlobalConfigLogic] GetVerifyCodeConfig error: ", logger.Field("error", err.Error()))
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "GetVerifyCodeConfig error: %v", err.Error())
@@ -50,6 +52,10 @@ func (l *GetGlobalConfigLogic) GetGlobalConfig() (resp *types.GetGlobalConfigRes
 	tool.SystemConfigSliceReflectToStruct(currencyCfg, &resp.Currency)
 	tool.SystemConfigSliceReflectToStruct(verifyCodeCfg, &resp.VerifyCode)
 
+	if report.IsGatewayMode() {
+		resp.Subscribe.SubscribePath = "/sub" + l.svcCtx.Config.Subscribe.SubscribePath
+	}
+
 	resp.Verify = types.VeifyConfig{
 		TurnstileSiteKey:          l.svcCtx.Config.Verify.TurnstileSiteKey,
 		EnableLoginVerify:         l.svcCtx.Config.Verify.LoginVerify,
@@ -59,7 +65,7 @@ func (l *GetGlobalConfigLogic) GetGlobalConfig() (resp *types.GetGlobalConfigRes
 	var methods []string
 
 	// auth methods
-	authMethods, err := l.svcCtx.AuthModel.FindAll(l.ctx)
+	authMethods, err := l.svcCtx.Store.Auth().FindAll(l.ctx)
 	if err != nil {
 		l.Logger.Error("[GetGlobalConfigLogic] FindAll error: ", logger.Field("error", err.Error()))
 	}
@@ -67,11 +73,15 @@ func (l *GetGlobalConfigLogic) GetGlobalConfig() (resp *types.GetGlobalConfigRes
 	for _, method := range authMethods {
 		if *method.Enabled {
 			methods = append(methods, method.Method)
+			if method.Method == "device" {
+				_ = json.Unmarshal([]byte(method.Config), &resp.Auth.Device)
+				resp.Auth.Device.Enable = true
+			}
 		}
 	}
 	resp.OAuthMethods = methods
 
-	webAds, err := l.svcCtx.SystemModel.FindOneByKey(l.ctx, "WebAD")
+	webAds, err := l.svcCtx.Store.System().FindOneByKey(l.ctx, "WebAD")
 	if err != nil {
 		l.Logger.Error("[GetGlobalConfigLogic] FindOneByKey error: ", logger.Field("error", err.Error()), logger.Field("key", "WebAD"))
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "FindOneByKey error: %v", err.Error())

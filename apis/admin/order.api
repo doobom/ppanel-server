@@ -14,14 +14,14 @@ type (
 	CreateOrderRequest {
 		UserId         int64  `json:"user_id" validate:"required"`
 		Type           uint8  `json:"type" validate:"required"`
-		Quantity       int64  `json:"quantity,omitempty"`
-		Price          int64  `json:"price" validate:"required"`
-		Amount         int64  `json:"amount" validate:"required"`
-		Discount       int64  `json:"discount,omitempty"`
+		Quantity       int64  `json:"quantity,omitempty" validate:"omitempty,lte=1000"`
+		Price          int64  `json:"price" validate:"required,gte=0,lte=2000000000"`
+		Amount         int64  `json:"amount" validate:"required,gte=0,lte=2147483647"`
+		Discount       int64  `json:"discount,omitempty" validate:"omitempty,gte=0,lte=2000000000"`
 		Coupon         string `json:"coupon,omitempty"`
-		CouponDiscount int64  `json:"coupon_discount,omitempty"`
-		Commission     int64  `json:"commission"`
-		FeeAmount      int64  `json:"fee_amount" validate:"required"`
+		CouponDiscount int64  `json:"coupon_discount,omitempty" validate:"omitempty,gte=0,lte=2000000000"`
+		Commission     int64  `json:"commission" validate:"gte=0,lte=2000000000"`
+		FeeAmount      int64  `json:"fee_amount" validate:"required,gte=0,lte=2000000000"`
 		PaymentId      int64  `json:"payment_id" validate:"required"`
 		TradeNo        string `json:"trade_no,omitempty"`
 		Status         uint8  `json:"status,omitempty"`
@@ -65,3 +65,4 @@ service ppanel {
 	@handler UpdateOrderStatus
 	put /status (UpdateOrderStatusRequest)
 }
+

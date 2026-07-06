@@ -13,7 +13,7 @@ import "../types.api"
 @server (
 	prefix:     v1/public/order
 	group:      public/order
-	middleware: AuthMiddleware
+	middleware: AuthMiddleware,DeviceMiddleware
 )
 service ppanel {
 	@doc "Pre create order"
@@ -48,3 +48,4 @@ service ppanel {
 	@handler QueryOrderList
 	get /list (QueryOrderListRequest) returns (QueryOrderListResponse)
 }
+
