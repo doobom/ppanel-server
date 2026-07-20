@@ -2,10 +2,11 @@ package system
 
 import (
 	"context"
+
+	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/logger"
-	"time"
+	"github.com/perfect-panel/server/pkg/timeutil"
 )
 
 type PreViewNodeMultiplierLogic struct {
@@ -23,10 +24,10 @@ func NewPreViewNodeMultiplierLogic(ctx context.Context, svcCtx *svc.ServiceConte
 	}
 }
 
-func (l *PreViewNodeMultiplierLogic) PreViewNodeMultiplier() (resp *types.PreViewNodeMultiplierResponse, err error) {
-	now := time.Now()
+func (l *PreViewNodeMultiplierLogic) PreViewNodeMultiplier() (resp *dto.PreViewNodeMultiplierResponse, err error) {
+	now := timeutil.Now()
 	ratio := l.svcCtx.NodeMultiplierManager.GetMultiplier(now)
-	return &types.PreViewNodeMultiplierResponse{
+	return &dto.PreViewNodeMultiplierResponse{
 		Ratio:       ratio,
 		CurrentTime: now.Format("2006-01-02 15:04:05"),
 	}, nil

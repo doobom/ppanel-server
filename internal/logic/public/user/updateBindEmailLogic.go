@@ -3,15 +3,17 @@ package user
 import (
 	"context"
 
+	"github.com/perfect-panel/server/internal/logic/auth/registerpolicy"
+	"github.com/perfect-panel/server/pkg/authmethod"
 	"github.com/perfect-panel/server/pkg/constant"
 
-	"github.com/perfect-panel/server/internal/model/user"
+	"github.com/perfect-panel/server/internal/model/entity/user"
 	"github.com/perfect-panel/server/pkg/xerr"
 	"github.com/pkg/errors"
 	"gorm.io/gorm"
 
+	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/logger"
 )
 
@@ -30,7 +32,15 @@ func NewUpdateBindEmailLogic(ctx context.Context, svcCtx *svc.ServiceContext) *U
 	}
 }
 
-func (l *UpdateBindEmailLogic) UpdateBindEmail(req *types.UpdateBindEmailRequest) error {
+func (l *UpdateBindEmailLogic) UpdateBindEmail(req *dto.UpdateBindEmailRequest) error {
+	if err := registerpolicy.EnsureMethodEnabled(l.ctx, l.svcCtx, registerpolicy.MethodEmail); err != nil {
+		return err
+	}
+	email, err := authmethod.ValidateEmail(req.Email, l.svcCtx.Config.Email.DomainSuffixList, l.svcCtx.Config.Email.EnableDomainSuffix)
+	if err != nil {
+		return errors.Wrapf(xerr.NewErrCode(xerr.InvalidParams), "invalid email: %v", err)
+	}
+	req.Email = email
 	u, ok := l.ctx.Value(constant.CtxKeyUser).(*user.User)
 	if !ok {
 		logger.Error("current user is not found in context")

@@ -29,6 +29,17 @@ func (m *Service) Start() {
 	if _, err := m.server.Register("@every 60s", checkTask); err != nil {
 		logger.Errorf("register check subscription task failed: %s", err.Error())
 	}
+	// schedule aggregated traffic flush task: every 60 seconds
+	flushTrafficTask := asynq.NewTask(types.SchedulerFlushTraffic, nil)
+	if _, err := m.server.Register("@every 60s", flushTrafficTask, asynq.MaxRetry(3)); err != nil {
+		logger.Errorf("register flush traffic task failed: %s", err.Error())
+	}
+	// Paid order state doubles as a durable activation outbox. Reconcile it
+	// periodically so a transient Redis outage cannot strand a paid order.
+	reconcilePaidOrdersTask := asynq.NewTask(types.SchedulerReconcilePaidOrders, nil)
+	if _, err := m.server.Register("@every 60s", reconcilePaidOrdersTask, asynq.MaxRetry(3)); err != nil {
+		logger.Errorf("register paid order reconciliation task failed: %s", err.Error())
+	}
 	//// schedule total server data task: every 5 minutes
 	//totalServerDataTask := asynq.NewTask(types.SchedulerTotalServerData, nil)
 	//if _, err := m.server.Register("@every 180s", totalServerDataTask); err != nil {
@@ -63,7 +74,11 @@ func (m *Service) Stop() {
 }
 
 func initService(svc *svc.ServiceContext) *asynq.Scheduler {
-	location, _ := time.LoadLocation("Asia/Shanghai")
+	location, err := time.LoadLocation(svc.Config.AppLocation)
+	if err != nil {
+		logger.Errorf("load timezone location %q failed: %v, falling back to Local", svc.Config.AppLocation, err)
+		location = time.Local
+	}
 	return asynq.NewScheduler(
 		asynq.RedisClientOpt{Addr: svc.Config.Redis.Host, Password: svc.Config.Redis.Pass, DB: 5},
 		&asynq.SchedulerOpts{

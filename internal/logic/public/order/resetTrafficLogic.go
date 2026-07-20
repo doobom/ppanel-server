@@ -5,16 +5,17 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/perfect-panel/server/internal/model/log"
+	"github.com/perfect-panel/server/internal/model/entity/log"
 	"github.com/perfect-panel/server/pkg/constant"
+	"github.com/perfect-panel/server/pkg/timeutil"
 	"github.com/perfect-panel/server/pkg/xerr"
 
 	"github.com/hibiken/asynq"
-	"github.com/perfect-panel/server/internal/model/order"
-	"github.com/perfect-panel/server/internal/model/user"
+	"github.com/perfect-panel/server/internal/model/dto"
+	"github.com/perfect-panel/server/internal/model/entity/order"
+	"github.com/perfect-panel/server/internal/model/entity/user"
 	"github.com/perfect-panel/server/internal/repository"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/logger"
 	"github.com/perfect-panel/server/pkg/tool"
 	queue "github.com/perfect-panel/server/queue/types"
@@ -36,7 +37,7 @@ func NewResetTrafficLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Rese
 	}
 }
 
-func (l *ResetTrafficLogic) ResetTraffic(req *types.ResetTrafficOrderRequest) (resp *types.ResetTrafficOrderResponse, err error) {
+func (l *ResetTrafficLogic) ResetTraffic(req *dto.ResetTrafficOrderRequest) (resp *dto.ResetTrafficOrderResponse, err error) {
 	store := l.svcCtx.Store
 	u, ok := l.ctx.Value(constant.CtxKeyUser).(*user.User)
 	if !ok {
@@ -59,8 +60,8 @@ func (l *ResetTrafficLogic) ResetTraffic(req *types.ResetTrafficOrderRequest) (r
 	if u.GiftAmount > 0 {
 		if u.GiftAmount >= amount {
 			deductionAmount = amount
-			amount = 0
 			u.GiftAmount -= amount
+			amount = 0
 		} else {
 			deductionAmount = u.GiftAmount
 			amount -= u.GiftAmount
@@ -112,13 +113,13 @@ func (l *ResetTrafficLogic) ResetTraffic(req *types.ResetTrafficOrderRequest) (r
 				Amount:      orderInfo.GiftAmount,
 				Balance:     u.GiftAmount,
 				Remark:      "Renewal order deduction",
-				Timestamp:   time.Now().UnixMilli(),
+				Timestamp:   timeutil.Now().UnixMilli(),
 			}
 			content, _ := giftLog.Marshal()
 
 			if err = txStore.Log().Insert(l.ctx, &log.SystemLog{
 				Type:     log.TypeGift.Uint8(),
-				Date:     time.Now().Format(time.DateOnly),
+				Date:     timeutil.Now().Format(time.DateOnly),
 				ObjectID: u.Id,
 				Content:  string(content),
 			}); err != nil {
@@ -148,7 +149,7 @@ func (l *ResetTrafficLogic) ResetTraffic(req *types.ResetTrafficOrderRequest) (r
 	} else {
 		l.Infow("[ResetTraffic] Enqueue task success", logger.Field("TaskID", taskInfo.ID))
 	}
-	return &types.ResetTrafficOrderResponse{
+	return &dto.ResetTrafficOrderResponse{
 		OrderNo: orderInfo.OrderNo,
 	}, nil
 }

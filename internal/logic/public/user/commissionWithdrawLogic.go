@@ -2,15 +2,15 @@ package user
 
 import (
 	"context"
-	"time"
 
-	"github.com/perfect-panel/server/internal/model/log"
-	"github.com/perfect-panel/server/internal/model/user"
+	"github.com/perfect-panel/server/internal/model/dto"
+	"github.com/perfect-panel/server/internal/model/entity/log"
+	"github.com/perfect-panel/server/internal/model/entity/user"
 	"github.com/perfect-panel/server/internal/repository"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/constant"
 	"github.com/perfect-panel/server/pkg/logger"
+	"github.com/perfect-panel/server/pkg/timeutil"
 	"github.com/perfect-panel/server/pkg/xerr"
 	"github.com/pkg/errors"
 )
@@ -30,7 +30,7 @@ func NewCommissionWithdrawLogic(ctx context.Context, svcCtx *svc.ServiceContext)
 	}
 }
 
-func (l *CommissionWithdrawLogic) CommissionWithdraw(req *types.CommissionWithdrawRequest) (resp *types.WithdrawalLog, err error) {
+func (l *CommissionWithdrawLogic) CommissionWithdraw(req *dto.CommissionWithdrawRequest) (resp *dto.WithdrawalLog, err error) {
 	u, ok := l.ctx.Value(constant.CtxKeyUser).(*user.User)
 	if !ok {
 		logger.Error("current user is not found in context")
@@ -43,10 +43,12 @@ func (l *CommissionWithdrawLogic) CommissionWithdraw(req *types.CommissionWithdr
 	}
 
 	// create withdrawal log
+	// Use negative amount to reflect the balance decrease, so that
+	// SumAmountByTypeAndObjectID produces the correct net total.
 	logInfo := log.Commission{
 		Type:      log.CommissionTypeConvertBalance,
-		Amount:    req.Amount,
-		Timestamp: time.Now().UnixMilli(),
+		Amount:    -req.Amount,
+		Timestamp: timeutil.Now().UnixMilli(),
 	}
 	b, err := logInfo.Marshal()
 
@@ -65,10 +67,10 @@ func (l *CommissionWithdrawLogic) CommissionWithdraw(req *types.CommissionWithdr
 
 		if err = store.Log().Insert(l.ctx, &log.SystemLog{
 			Type:      log.TypeCommission.Uint8(),
-			Date:      time.Now().Format("2006-01-02"),
+			Date:      timeutil.Now().Format("2006-01-02"),
 			ObjectID:  u.Id,
 			Content:   string(b),
-			CreatedAt: time.Now(),
+			CreatedAt: timeutil.Now(),
 		}); err != nil {
 			l.Errorf("Failed to create commission log for user %d: %v", u.Id, err)
 			return errors.Wrapf(xerr.NewErrCode(xerr.DatabaseInsertError), "Failed to create commission log for user %d: %v", u.Id, err)
@@ -90,12 +92,12 @@ func (l *CommissionWithdrawLogic) CommissionWithdraw(req *types.CommissionWithdr
 		return nil, err
 	}
 
-	return &types.WithdrawalLog{
+	return &dto.WithdrawalLog{
 		UserId:    u.Id,
 		Amount:    req.Amount,
 		Content:   req.Content,
 		Status:    0,
 		Reason:    "",
-		CreatedAt: time.Now().UnixMilli(),
+		CreatedAt: timeutil.Now().UnixMilli(),
 	}, nil
 }

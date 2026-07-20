@@ -3,12 +3,12 @@ package server
 import (
 	"context"
 	"errors"
-	"time"
 
-	"github.com/perfect-panel/server/internal/model/node"
+	"github.com/perfect-panel/server/internal/model/dto"
+	"github.com/perfect-panel/server/internal/model/entity/node"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/logger"
+	"github.com/perfect-panel/server/pkg/timeutil"
 )
 
 type ServerPushStatusLogic struct {
@@ -26,7 +26,7 @@ func NewServerPushStatusLogic(ctx context.Context, svcCtx *svc.ServiceContext) *
 	}
 }
 
-func (l *ServerPushStatusLogic) ServerPushStatus(req *types.ServerPushStatusRequest) error {
+func (l *ServerPushStatusLogic) ServerPushStatus(req *dto.ServerPushStatusRequest) error {
 	// Find server info
 	serverInfo, err := l.svcCtx.Store.Node().FindOneServer(l.ctx, req.ServerId)
 	if err != nil || serverInfo.Id <= 0 {
@@ -43,7 +43,7 @@ func (l *ServerPushStatusLogic) ServerPushStatus(req *types.ServerPushStatusRequ
 		l.Errorw("[ServerPushStatus] UpdateNodeStatus error", logger.Field("error", err))
 		return errors.New("update node status failed")
 	}
-	now := time.Now()
+	now := timeutil.Now()
 	serverInfo.LastReportedAt = &now
 
 	err = l.svcCtx.Store.Node().UpdateServer(l.ctx, serverInfo)

@@ -4,10 +4,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/perfect-panel/server/internal/model/log"
+	"github.com/perfect-panel/server/internal/model/dto"
+	"github.com/perfect-panel/server/internal/model/entity/log"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/logger"
+	"github.com/perfect-panel/server/pkg/timeutil"
 	"github.com/perfect-panel/server/pkg/xerr"
 	"github.com/pkg/errors"
 )
@@ -26,14 +27,14 @@ func NewFilterServerTrafficLogLogic(ctx context.Context, svcCtx *svc.ServiceCont
 		svcCtx: svcCtx,
 	}
 }
-func (l *FilterServerTrafficLogLogic) FilterServerTrafficLog(req *types.FilterServerTrafficLogRequest) (resp *types.FilterServerTrafficLogResponse, err error) {
-	today := time.Now().Format("2006-01-02")
-	var list []types.ServerTrafficLog
+func (l *FilterServerTrafficLogLogic) FilterServerTrafficLog(req *dto.FilterServerTrafficLogRequest) (resp *dto.FilterServerTrafficLogResponse, err error) {
+	today := timeutil.Now().Format("2006-01-02")
+	var list []dto.ServerTrafficLog
 	var total int64
 
 	if req.Date == today || req.Date == "" {
-		now := time.Now()
-		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+		now := timeutil.Now()
+		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, timeutil.Location())
 		end := start.Add(24 * time.Hour)
 
 		serverTraffic, err := l.svcCtx.Store.TrafficLog().QueryServerTrafficRanking(l.ctx, start, end)
@@ -43,7 +44,7 @@ func (l *FilterServerTrafficLogLogic) FilterServerTrafficLog(req *types.FilterSe
 		}
 
 		for _, v := range serverTraffic {
-			list = append(list, types.ServerTrafficLog{
+			list = append(list, dto.ServerTrafficLog{
 				ServerId: v.ServerId,
 				Upload:   v.Upload,
 				Download: v.Download,
@@ -63,7 +64,7 @@ func (l *FilterServerTrafficLogLogic) FilterServerTrafficLog(req *types.FilterSe
 				endIdx = todayTotal
 			}
 			pageData := list[startIdx:endIdx]
-			return &types.FilterServerTrafficLogResponse{
+			return &dto.FilterServerTrafficLogResponse{
 				List:  pageData,
 				Total: int64(todayTotal),
 			}, nil
@@ -103,7 +104,7 @@ func (l *FilterServerTrafficLogLogic) FilterServerTrafficLog(req *types.FilterSe
 				}
 			}
 
-			list = append(list, types.ServerTrafficLog{
+			list = append(list, dto.ServerTrafficLog{
 				ServerId: item.ObjectID,
 				Upload:   content.Upload,
 				Download: content.Download,
@@ -119,7 +120,7 @@ func (l *FilterServerTrafficLogLogic) FilterServerTrafficLog(req *types.FilterSe
 		}
 		pageData := list[startIdx:endIdx]
 
-		return &types.FilterServerTrafficLogResponse{
+		return &dto.FilterServerTrafficLogResponse{
 			List:  pageData,
 			Total: int64(todayTotal) + historyTotal,
 		}, nil
@@ -141,7 +142,7 @@ func (l *FilterServerTrafficLogLogic) FilterServerTrafficLog(req *types.FilterSe
 			l.Errorw("[FilterServerTrafficLog] Unmarshal Error", logger.Field("error", err.Error()), logger.Field("content", item.Content))
 			continue
 		}
-		list = append(list, types.ServerTrafficLog{
+		list = append(list, dto.ServerTrafficLog{
 			ServerId: item.ObjectID,
 			Upload:   content.Upload,
 			Download: content.Download,
@@ -151,7 +152,7 @@ func (l *FilterServerTrafficLogLogic) FilterServerTrafficLog(req *types.FilterSe
 		})
 	}
 
-	return &types.FilterServerTrafficLogResponse{
+	return &dto.FilterServerTrafficLogResponse{
 		List:  list,
 		Total: total,
 	}, nil

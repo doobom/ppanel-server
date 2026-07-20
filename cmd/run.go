@@ -12,7 +12,6 @@ import (
 	"syscall"
 
 	"github.com/google/uuid"
-	"github.com/perfect-panel/server/pkg/hertzx"
 
 	"github.com/perfect-panel/server/initialize"
 	"github.com/perfect-panel/server/internal"
@@ -23,6 +22,7 @@ import (
 	"github.com/perfect-panel/server/pkg/logger"
 	"github.com/perfect-panel/server/pkg/orm"
 	"github.com/perfect-panel/server/pkg/service"
+	"github.com/perfect-panel/server/pkg/timeutil"
 	"github.com/perfect-panel/server/pkg/tool"
 	"github.com/perfect-panel/server/queue"
 	"github.com/perfect-panel/server/scheduler"
@@ -75,15 +75,16 @@ func getServers() *service.Group {
 	}
 	// check config file is empty, if empty, start init web server
 	if initConfig(&c) {
-		status, server := initialize.Config(startConfigPath)
+		status, engine := initialize.Config(startConfigPath)
 		<-status
-		if err := server.Shutdown(context.TODO()); err != nil {
+		if err := engine.Shutdown(context.TODO()); err != nil {
 			log.Printf("Init Server Shutdown: %s\n", err.Error())
 		}
 	}
 	conf.MustLoad(startConfigPath, &c)
-	if !c.Debug {
-		hertzx.SetMode(hertzx.ReleaseMode)
+	// Initialize application timezone
+	if err := timeutil.LoadLocation(c.AppLocation); err != nil {
+		logger.Errorf("load app timezone %q failed: %v, falling back to Local", c.AppLocation, err)
 	}
 	// init logger
 	if err := logger.SetUp(c.Logger); err != nil {

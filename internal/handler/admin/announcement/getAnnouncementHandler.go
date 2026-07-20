@@ -1,25 +1,31 @@
 package announcement
 
 import (
+	"context"
+
+	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/perfect-panel/server/internal/logic/admin/announcement"
+	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
-	"github.com/perfect-panel/server/pkg/hertzx"
+	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
 // Get announcement
-func GetAnnouncementHandler(svcCtx *svc.ServiceContext) func(c *hertzx.Context) {
-	return func(c *hertzx.Context) {
-		var req types.GetAnnouncementRequest
-		_ = c.ShouldBind(&req)
+func GetAnnouncementHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
+	return func(ctx context.Context, c *app.RequestContext) {
+		var req dto.GetAnnouncementRequest
+		if err := httpx.ShouldBind(c, &req); err != nil {
+			result.ParamErrorResult(c, err)
+			return
+		}
 		validateErr := svcCtx.Validate(&req)
 		if validateErr != nil {
 			result.ParamErrorResult(c, validateErr)
 			return
 		}
 
-		l := announcement.NewGetAnnouncementLogic(c.Request.Context(), svcCtx)
+		l := announcement.NewGetAnnouncementLogic(ctx, svcCtx)
 		resp, err := l.GetAnnouncement(&req)
 		result.HttpResult(c, resp, err)
 	}

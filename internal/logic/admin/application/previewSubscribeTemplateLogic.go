@@ -2,13 +2,13 @@ package application
 
 import (
 	"context"
-	"time"
 
 	"github.com/perfect-panel/server/adapter"
-	"github.com/perfect-panel/server/internal/model/node"
+	"github.com/perfect-panel/server/internal/model/dto"
+	"github.com/perfect-panel/server/internal/model/entity/node"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/logger"
+	"github.com/perfect-panel/server/pkg/timeutil"
 	"github.com/perfect-panel/server/pkg/xerr"
 	"github.com/pkg/errors"
 )
@@ -28,7 +28,7 @@ func NewPreviewSubscribeTemplateLogic(ctx context.Context, svcCtx *svc.ServiceCo
 	}
 }
 
-func (l *PreviewSubscribeTemplateLogic) PreviewSubscribeTemplate(req *types.PreviewSubscribeTemplateRequest) (resp *types.PreviewSubscribeTemplateResponse, err error) {
+func (l *PreviewSubscribeTemplateLogic) PreviewSubscribeTemplate(req *dto.PreviewSubscribeTemplateRequest) (resp *dto.PreviewSubscribeTemplateResponse, err error) {
 	enable := true
 	_, servers, err := l.svcCtx.Store.Node().FilterNodeList(l.ctx, &node.FilterNodeParams{
 		Page:    1,
@@ -52,8 +52,9 @@ func (l *PreviewSubscribeTemplateLogic) PreviewSubscribeTemplate(req *types.Prev
 		adapter.WithSubscribeName("Test Subscribe"),
 		adapter.WithOutputFormat(data.OutputFormat),
 		adapter.WithUserInfo(adapter.User{
+			ID:           10000,
 			Password:     "test-password",
-			ExpiredAt:    time.Now().AddDate(1, 0, 0),
+			ExpiredAt:    timeutil.Now().AddDate(1, 0, 0),
 			Download:     0,
 			Upload:       0,
 			Traffic:      1000,
@@ -70,7 +71,7 @@ func (l *PreviewSubscribeTemplateLogic) PreviewSubscribeTemplate(req *types.Prev
 		l.Errorf("[PreviewSubscribeTemplateLogic] Build error: %v", err.Error())
 		return nil, errors.Wrapf(xerr.NewErrMsg(err.Error()), "Build error: %v", err.Error())
 	}
-	return &types.PreviewSubscribeTemplateResponse{
+	return &dto.PreviewSubscribeTemplateResponse{
 		Template: string(bytes),
 	}, nil
 }

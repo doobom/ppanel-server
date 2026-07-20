@@ -4,10 +4,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/perfect-panel/server/internal/model/log"
+	"github.com/perfect-panel/server/internal/model/dto"
+	"github.com/perfect-panel/server/internal/model/entity/log"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/logger"
+	"github.com/perfect-panel/server/pkg/timeutil"
 	"github.com/perfect-panel/server/pkg/xerr"
 	"github.com/pkg/errors"
 )
@@ -27,7 +28,7 @@ func NewFilterUserSubscribeTrafficLogLogic(ctx context.Context, svcCtx *svc.Serv
 	}
 }
 
-func (l *FilterUserSubscribeTrafficLogLogic) FilterUserSubscribeTrafficLog(req *types.FilterSubscribeTrafficRequest) (resp *types.FilterSubscribeTrafficResponse, err error) {
+func (l *FilterUserSubscribeTrafficLogLogic) FilterUserSubscribeTrafficLog(req *dto.FilterSubscribeTrafficRequest) (resp *dto.FilterSubscribeTrafficResponse, err error) {
 	if req.Size <= 0 {
 		req.Size = 10
 	}
@@ -35,13 +36,13 @@ func (l *FilterUserSubscribeTrafficLogLogic) FilterUserSubscribeTrafficLog(req *
 		req.Page = 1
 	}
 
-	today := time.Now().Format("2006-01-02")
-	var list []types.UserSubscribeTrafficLog
+	today := timeutil.Now().Format("2006-01-02")
+	var list []dto.UserSubscribeTrafficLog
 	var total int64
 
 	if req.Date == today || req.Date == "" {
-		now := time.Now()
-		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+		now := timeutil.Now()
+		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, timeutil.Location())
 		end := start.Add(24 * time.Hour)
 
 		userTraffic, err := l.svcCtx.Store.TrafficLog().QueryUserTrafficRanking(l.ctx, start, end)
@@ -51,7 +52,7 @@ func (l *FilterUserSubscribeTrafficLogLogic) FilterUserSubscribeTrafficLog(req *
 		}
 
 		for _, v := range userTraffic {
-			list = append(list, types.UserSubscribeTrafficLog{
+			list = append(list, dto.UserSubscribeTrafficLog{
 				UserId:      v.UserId,
 				SubscribeId: v.SubscribeId,
 				Upload:      v.Upload,
@@ -70,7 +71,7 @@ func (l *FilterUserSubscribeTrafficLogLogic) FilterUserSubscribeTrafficLog(req *
 				endIdx = todayTotal
 			}
 			pageData := list[startIdx:endIdx]
-			return &types.FilterSubscribeTrafficResponse{
+			return &dto.FilterSubscribeTrafficResponse{
 				List:  pageData,
 				Total: int64(todayTotal),
 			}, nil
@@ -96,7 +97,7 @@ func (l *FilterUserSubscribeTrafficLogLogic) FilterUserSubscribeTrafficLog(req *
 				l.Errorw("[FilterUserSubscribeTrafficLog] Unmarshal Content Error", logger.Field("error", err.Error()))
 				continue
 			}
-			list = append(list, types.UserSubscribeTrafficLog{
+			list = append(list, dto.UserSubscribeTrafficLog{
 				UserId:      item.UserId,
 				SubscribeId: item.SubscribeId,
 				Upload:      item.Upload,
@@ -112,7 +113,7 @@ func (l *FilterUserSubscribeTrafficLogLogic) FilterUserSubscribeTrafficLog(req *
 		}
 		pageData := list[startIdx:endIdx]
 
-		return &types.FilterSubscribeTrafficResponse{
+		return &dto.FilterSubscribeTrafficResponse{
 			List:  pageData,
 			Total: int64(todayTotal) + historyTotal,
 		}, nil
@@ -135,7 +136,7 @@ func (l *FilterUserSubscribeTrafficLogLogic) FilterUserSubscribeTrafficLog(req *
 			l.Errorw("[FilterUserSubscribeTrafficLog] Unmarshal Content Error", logger.Field("error", err.Error()))
 			continue
 		}
-		list = append(list, types.UserSubscribeTrafficLog{
+		list = append(list, dto.UserSubscribeTrafficLog{
 			UserId:      item.UserId,
 			SubscribeId: item.SubscribeId,
 			Upload:      item.Upload,
@@ -145,7 +146,7 @@ func (l *FilterUserSubscribeTrafficLogLogic) FilterUserSubscribeTrafficLog(req *
 			Details:     false,
 		})
 	}
-	return &types.FilterSubscribeTrafficResponse{
+	return &dto.FilterSubscribeTrafficResponse{
 		List:  list,
 		Total: total,
 	}, nil

@@ -9,7 +9,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/perfect-panel/server/internal/config"
 	"github.com/perfect-panel/server/internal/logic/telegram"
-	"github.com/perfect-panel/server/internal/model/auth"
+	"github.com/perfect-panel/server/internal/model/entity/auth"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/tool"
 )
@@ -38,8 +38,24 @@ func Telegram(svc *svc.ServiceContext) {
 		return
 	}
 
-	if tgConfig.WebHookDomain == "" || svc.Config.Debug {
-		// set Long Polling mode
+	// Pick mode: prefer webhook, fall back to long-polling when no domain or in debug.
+	useWebhook := tgConfig.WebHookDomain != "" && !svc.Config.Debug
+	if useWebhook {
+		// Webhook mode: register URL with Telegram
+		webhookURL := fmt.Sprintf("%s/v1/telegram/webhook?secret=%s",
+			tgConfig.WebHookDomain, tool.Md5Encode(tgConfig.BotToken, false))
+		wh, err := tgbotapi.NewWebhook(webhookURL)
+		if err != nil {
+			logger.Errorf("[Init Telegram Config] New Webhook Error: %s", err.Error())
+			return
+		}
+		if _, err = bot.Request(wh); err != nil {
+			logger.Errorf("[Init Telegram Config] Request Webhook Error: %s", err.Error())
+			return
+		}
+		logger.Info("[Init Telegram Config] Webhook registered", logger.Field("url", webhookURL))
+	} else {
+		// Long Polling mode
 		updateConfig := tgbotapi.NewUpdate(0)
 		updateConfig.Timeout = 60
 		updates := bot.GetUpdatesChan(updateConfig)
@@ -52,17 +68,11 @@ func Telegram(svc *svc.ServiceContext) {
 				}
 			}
 		}()
-	} else {
-		wh, err := tgbotapi.NewWebhook(fmt.Sprintf("%s/v1/telegram/webhook?secret=%s", tgConfig.WebHookDomain, tool.Md5Encode(tgConfig.BotToken, false)))
-		if err != nil {
-			logger.Errorf("[Init Telegram Config] New Webhook Error: %s", err.Error())
-			return
+		mode := "long-polling"
+		if svc.Config.Debug {
+			mode = "long-polling (debug)"
 		}
-		_, err = bot.Request(wh)
-		if err != nil {
-			logger.Errorf("[Init Telegram Config] Request Webhook Error: %s", err.Error())
-			return
-		}
+		logger.Info("[Init Telegram Config] Using " + mode)
 	}
 
 	user, err := bot.GetMe()
@@ -80,5 +90,5 @@ func Telegram(svc *svc.ServiceContext) {
 	}
 	svc.TelegramBot = bot
 
-	logger.Info("[Init Telegram Config] Webhook set success")
+	logger.Info("[Init Telegram Config] Telegram init success")
 }

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/perfect-panel/server/internal/config"
-	"github.com/perfect-panel/server/internal/types"
+	"github.com/perfect-panel/server/internal/model/dto"
 )
 
 func TestOverrideModelAndApplyOverride(t *testing.T) {
@@ -19,14 +19,14 @@ func TestOverrideModelAndApplyOverride(t *testing.T) {
 		},
 	})
 
-	override, allInherited, err := OverrideModel(1, types.ServerNodeConfigOverride{
+	override, allInherited, err := OverrideModel(1, dto.ServerNodeConfigOverride{
 		InheritIPStrategy: false,
 		IPStrategy:        "prefer_ipv6",
 		InheritDNS:        false,
-		DNS:               []types.NodeDNS{},
+		DNS:               []dto.NodeDNS{},
 		InheritBlock:      true,
 		InheritOutbound:   false,
-		Outbound: []types.NodeOutbound{
+		Outbound: []dto.NodeOutbound{
 			{Name: "node", Protocol: "reject", Rules: []string{"geosite:private"}},
 		},
 	})
@@ -57,7 +57,7 @@ func TestOverrideModelAndApplyOverride(t *testing.T) {
 }
 
 func TestOverrideModelAllInherited(t *testing.T) {
-	_, allInherited, err := OverrideModel(1, types.ServerNodeConfigOverride{
+	_, allInherited, err := OverrideModel(1, dto.ServerNodeConfigOverride{
 		InheritIPStrategy: true,
 		InheritDNS:        true,
 		InheritBlock:      true,
@@ -75,7 +75,7 @@ func TestSanitizeNodeConfigValues(t *testing.T) {
 	global := GlobalValues(config.NodeConfig{
 		IPStrategy: "prefer_ipv4",
 		DNS: []config.NodeDNS{
-			{Proto: " udp ", Address: " 8.8.8.8:53 ", Domains: []string{" geosite:google ", "", "geosite:google"}},
+			{Proto: " udp ", Address: " 8.8.8.8:53 ", ServerName: " dns.google ", Domains: []string{" geosite:google ", "", "geosite:google"}},
 			{Proto: "", Address: "1.1.1.1:53", Domains: []string{"geosite:cloudflare"}},
 		},
 		Block: []string{" geosite:ads ", "", "geosite:ads", "   "},
@@ -87,6 +87,13 @@ func TestSanitizeNodeConfigValues(t *testing.T) {
 				User:             " user ",
 				Transport:        " websocket ",
 				Host:             " example.com ",
+				Plugin:           " v2ray-plugin ",
+				PluginOptions:    map[string]any{"mode": "websocket"},
+				ALPN:             []string{" h2 ", "", "h2"},
+				XHTTPMode:        " packet-up ",
+				Encryption:       " mlkem768x25519plus ",
+				EncryptionMode:   " native ",
+				Multiplex:        " medium ",
 				Settings:         " {\"address\":\"127.0.0.1\",\"port\":1080} ",
 				StreamSettings:   " {\"network\":\"tcp\"} ",
 				RealityPublicKey: " public-key ",
@@ -103,6 +110,9 @@ func TestSanitizeNodeConfigValues(t *testing.T) {
 	if global.DNS[0].Proto != "udp" || global.DNS[0].Address != "8.8.8.8:53" {
 		t.Fatalf("DNS = %#v, want trimmed valid DNS", global.DNS[0])
 	}
+	if global.DNS[0].ServerName != "dns.google" {
+		t.Fatalf("DNS server name = %q, want dns.google", global.DNS[0].ServerName)
+	}
 	if len(global.DNS[0].Domains) != 1 || global.DNS[0].Domains[0] != "geosite:google" {
 		t.Fatalf("DNS domains = %#v, want sanitized domains", global.DNS[0].Domains)
 	}
@@ -118,6 +128,14 @@ func TestSanitizeNodeConfigValues(t *testing.T) {
 	if global.Outbound[0].User != "user" || global.Outbound[0].Transport != "websocket" || global.Outbound[0].Host != "example.com" {
 		t.Fatalf("Outbound extra fields = %#v, want trimmed extra fields", global.Outbound[0])
 	}
+	if global.Outbound[0].Plugin != "v2ray-plugin" || global.Outbound[0].XHTTPMode != "packet-up" ||
+		global.Outbound[0].Encryption != "mlkem768x25519plus" || global.Outbound[0].EncryptionMode != "native" ||
+		global.Outbound[0].Multiplex != "medium" {
+		t.Fatalf("Outbound extended fields = %#v, want preserved fields", global.Outbound[0])
+	}
+	if len(global.Outbound[0].ALPN) != 1 || global.Outbound[0].ALPN[0] != "h2" {
+		t.Fatalf("Outbound ALPN = %#v, want [h2]", global.Outbound[0].ALPN)
+	}
 	if global.Outbound[0].Settings != "{\"address\":\"127.0.0.1\",\"port\":1080}" || global.Outbound[0].StreamSettings != "{\"network\":\"tcp\"}" {
 		t.Fatalf("Outbound raw JSON fields = %#v, want trimmed raw JSON fields", global.Outbound[0])
 	}
@@ -130,12 +148,12 @@ func TestSanitizeNodeConfigValues(t *testing.T) {
 }
 
 func TestOverrideModelPreservesOutboundWithoutRules(t *testing.T) {
-	override, allInherited, err := OverrideModel(1, types.ServerNodeConfigOverride{
+	override, allInherited, err := OverrideModel(1, dto.ServerNodeConfigOverride{
 		InheritIPStrategy: true,
 		InheritDNS:        true,
 		InheritBlock:      true,
 		InheritOutbound:   false,
-		Outbound: []types.NodeOutbound{
+		Outbound: []dto.NodeOutbound{
 			{
 				Name:     " warp ",
 				Protocol: " socks ",

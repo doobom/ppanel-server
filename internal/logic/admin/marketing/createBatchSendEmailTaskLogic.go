@@ -7,11 +7,12 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/perfect-panel/server/internal/model/task"
-	"github.com/perfect-panel/server/internal/model/user"
+	"github.com/perfect-panel/server/internal/model/dto"
+	"github.com/perfect-panel/server/internal/model/entity/task"
+	"github.com/perfect-panel/server/internal/model/entity/user"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/logger"
+	"github.com/perfect-panel/server/pkg/timeutil"
 	"github.com/perfect-panel/server/pkg/tool"
 	"github.com/perfect-panel/server/pkg/xerr"
 	types2 "github.com/perfect-panel/server/queue/types"
@@ -31,7 +32,7 @@ func NewCreateBatchSendEmailTaskLogic(ctx context.Context, svcCtx *svc.ServiceCo
 		svcCtx: svcCtx,
 	}
 }
-func (l *CreateBatchSendEmailTaskLogic) CreateBatchSendEmailTask(req *types.CreateBatchSendEmailTaskRequest) (err error) {
+func (l *CreateBatchSendEmailTaskLogic) CreateBatchSendEmailTask(req *dto.CreateBatchSendEmailTaskRequest) (err error) {
 	scope := task.ParseScopeType(req.Scope)
 	emails, err := l.svcCtx.Store.User().QueryEmailRecipients(l.ctx, &user.EmailRecipientFilter{
 		Scope:             scope.Int8(),
@@ -62,11 +63,11 @@ func (l *CreateBatchSendEmailTaskLogic) CreateBatchSendEmailTask(req *types.Crea
 		return xerr.NewErrMsg("No additional email addresses provided for skip scope")
 	}
 
-	scheduledAt := time.Now().Add(10 * time.Second) // 默认延迟10秒执行,防止任务创建和执行时间过于接近
+	scheduledAt := timeutil.Now().Add(10 * time.Second) // 默认延迟10秒执行,防止任务创建和执行时间过于接近
 	if req.Scheduled != 0 {
 		scheduledAt = time.Unix(req.Scheduled, 0)
-		if scheduledAt.Before(time.Now()) {
-			scheduledAt = time.Now()
+		if scheduledAt.Before(timeutil.Now()) {
+			scheduledAt = timeutil.Now()
 		}
 	}
 

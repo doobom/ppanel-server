@@ -2,12 +2,11 @@ package common
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/perfect-panel/server/internal/config"
+	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/authmethod"
 	"github.com/perfect-panel/server/pkg/constant"
 	"github.com/perfect-panel/server/pkg/logger"
@@ -31,19 +30,22 @@ func NewCheckVerificationCodeLogic(ctx context.Context, svcCtx *svc.ServiceConte
 	}
 }
 
-func (l *CheckVerificationCodeLogic) CheckVerificationCode(req *types.CheckVerificationCodeRequest) (resp *types.CheckVerificationCodeRespone, err error) {
-	resp = &types.CheckVerificationCodeRespone{}
+func (l *CheckVerificationCodeLogic) CheckVerificationCode(req *dto.CheckVerificationCodeRequest) (resp *dto.CheckVerificationCodeRespone, err error) {
+	resp = &dto.CheckVerificationCodeRespone{}
 	if req.Method == authmethod.Email {
-		cacheKey := fmt.Sprintf("%s:%s:%s", config.AuthCodeCacheKey, constant.ParseVerifyType(req.Type), req.Account)
-		value, err := l.svcCtx.Redis.Get(l.ctx, cacheKey).Result()
-		if err != nil {
+		email, validationErr := authmethod.ValidateEmail(
+			req.Account,
+			l.svcCtx.Config.Email.DomainSuffixList,
+			constant.ParseVerifyType(req.Type) == constant.Register && l.svcCtx.Config.Email.EnableDomainSuffix,
+		)
+		if validationErr != nil {
 			return resp, nil
 		}
-		var payload CacheKeyPayload
-		if err := json.Unmarshal([]byte(value), &payload); err != nil {
-			return resp, nil
-		}
-		if payload.Code != req.Code {
+		cacheKey := fmt.Sprintf("%s:%s:%s", config.AuthCodeCacheKey, constant.ParseVerifyType(req.Type), email)
+		if err := ValidateVerificationCode(l.ctx, l.svcCtx.Redis, cacheKey, req.Code, false); err != nil {
+			if errors.Is(err, ErrVerificationAttemptsExceeded) {
+				return nil, errors.Wrap(xerr.NewErrCode(xerr.TooManyRequests), "verification attempts exceeded")
+			}
 			return resp, nil
 		}
 		resp.Status = true
@@ -53,15 +55,10 @@ func (l *CheckVerificationCodeLogic) CheckVerificationCode(req *types.CheckVerif
 			return nil, errors.Wrapf(xerr.NewErrCode(xerr.TelephoneError), "Invalid phone number")
 		}
 		cacheKey := fmt.Sprintf("%s:%s:+%s", config.AuthCodeTelephoneCacheKey, constant.ParseVerifyType(req.Type), req.Account)
-		value, err := l.svcCtx.Redis.Get(l.ctx, cacheKey).Result()
-		if err != nil {
-			return resp, nil
-		}
-		var payload CacheKeyPayload
-		if err := json.Unmarshal([]byte(value), &payload); err != nil {
-			return resp, nil
-		}
-		if payload.Code != req.Code {
+		if err := ValidateVerificationCode(l.ctx, l.svcCtx.Redis, cacheKey, req.Code, false); err != nil {
+			if errors.Is(err, ErrVerificationAttemptsExceeded) {
+				return nil, errors.Wrap(xerr.NewErrCode(xerr.TooManyRequests), "verification attempts exceeded")
+			}
 			return resp, nil
 		}
 		resp.Status = true

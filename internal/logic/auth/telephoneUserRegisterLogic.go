@@ -2,18 +2,20 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/perfect-panel/server/internal/model/log"
+	"github.com/perfect-panel/server/internal/model/entity/log"
 	"github.com/perfect-panel/server/pkg/constant"
+	"github.com/perfect-panel/server/pkg/timeutil"
 
 	"github.com/perfect-panel/server/internal/config"
-	"github.com/perfect-panel/server/internal/model/user"
+	"github.com/perfect-panel/server/internal/logic/auth/registerpolicy"
+	"github.com/perfect-panel/server/internal/logic/common"
+	"github.com/perfect-panel/server/internal/model/dto"
+	"github.com/perfect-panel/server/internal/model/entity/user"
 	"github.com/perfect-panel/server/internal/repository"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/jwt"
 	"github.com/perfect-panel/server/pkg/logger"
 	"github.com/perfect-panel/server/pkg/phone"
@@ -23,11 +25,6 @@ import (
 	"github.com/pkg/errors"
 	"gorm.io/gorm"
 )
-
-type CacheKeyPayload struct {
-	Code   string `json:"code"`
-	LastAt int64  `json:"lastAt"`
-}
 
 type TelephoneUserRegisterLogic struct {
 	logger.Logger
@@ -44,18 +41,15 @@ func NewTelephoneUserRegisterLogic(ctx context.Context, svcCtx *svc.ServiceConte
 	}
 }
 
-func (l *TelephoneUserRegisterLogic) TelephoneUserRegister(req *types.TelephoneRegisterRequest) (resp *types.LoginResponse, err error) {
-	c := l.svcCtx.Config.Register
-	// Check if the registration is stopped
-	if c.StopRegister {
-		return nil, errors.Wrapf(xerr.NewErrCode(xerr.StopRegister), "stop register")
+func (l *TelephoneUserRegisterLogic) TelephoneUserRegister(req *dto.TelephoneRegisterRequest) (resp *dto.LoginResponse, err error) {
+	if err := registerpolicy.EnsureRegistrationOpen(l.ctx, l.svcCtx, registerpolicy.MethodMobile); err != nil {
+		return nil, err
+	}
+	if err := registerpolicy.VerifyHuman(l.ctx, l.svcCtx, req.CfToken, req.IP); err != nil {
+		return nil, err
 	}
 	if !phone.Check(req.TelephoneAreaCode, req.Telephone) {
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.TelephoneError), "telephone number error")
-	}
-
-	if !l.svcCtx.Config.Mobile.Enable {
-		return nil, errors.Wrapf(xerr.NewErrCode(xerr.SmsNotEnabled), "sms login is not enabled")
 	}
 
 	phoneNumber, err := phone.FormatToE164(req.TelephoneAreaCode, req.Telephone)
@@ -65,22 +59,9 @@ func (l *TelephoneUserRegisterLogic) TelephoneUserRegister(req *types.TelephoneR
 
 	// if the email verification is enabled, the verification code is required
 	cacheKey := fmt.Sprintf("%s:%s:%s", config.AuthCodeTelephoneCacheKey, constant.ParseVerifyType(uint8(constant.Register)), phoneNumber)
-	value, err := l.svcCtx.Redis.Get(l.ctx, cacheKey).Result()
-	if err != nil {
-		l.Errorw("Redis Error", logger.Field("error", err.Error()), logger.Field("cacheKey", cacheKey))
+	if err := common.ValidateVerificationCode(l.ctx, l.svcCtx.Redis, cacheKey, req.Code, false); err != nil {
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.VerifyCodeError), "code error")
 	}
-
-	var payload CacheKeyPayload
-	err = json.Unmarshal([]byte(value), &payload)
-	if err != nil {
-		l.Errorw("Unmarshal Error", logger.Field("error", err.Error()), logger.Field("value", value))
-		return nil, errors.Wrapf(xerr.NewErrCode(xerr.VerifyCodeError), "code error")
-	}
-	if payload.Code != req.Code {
-		return nil, errors.Wrapf(xerr.NewErrCode(xerr.VerifyCodeError), "code error")
-	}
-	l.svcCtx.Redis.Del(l.ctx, cacheKey)
 	// Check if the user exists
 	_, err = l.svcCtx.Store.User().FindUserAuthMethodByOpenID(l.ctx, "mobile", phoneNumber)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -102,6 +83,12 @@ func (l *TelephoneUserRegisterLogic) TelephoneUserRegister(req *types.TelephoneR
 			l.Errorw("FindOneByReferCode Error", logger.Field("error", err))
 			return nil, errors.Wrapf(xerr.NewErrCode(xerr.InviteCodeError), "invite code is invalid")
 		}
+	}
+	if err := registerpolicy.TakeIPPermit(l.ctx, l.svcCtx, req.IP); err != nil {
+		return nil, err
+	}
+	if err := common.ValidateVerificationCode(l.ctx, l.svcCtx.Redis, cacheKey, req.Code, true); err != nil {
+		return nil, errors.Wrapf(xerr.NewErrCode(xerr.VerifyCodeError), "code error")
 	}
 
 	// Generate password
@@ -167,7 +154,7 @@ func (l *TelephoneUserRegisterLogic) TelephoneUserRegister(req *types.TelephoneR
 	// Generate token
 	token, err := jwt.NewJwtToken(
 		l.svcCtx.Config.JwtAuth.AccessSecret,
-		time.Now().Unix(),
+		timeutil.Now().Unix(),
 		l.svcCtx.Config.JwtAuth.AccessExpire,
 		jwt.WithOption("UserId", userInfo.Id),
 		jwt.WithOption("SessionId", sessionId),
@@ -189,13 +176,13 @@ func (l *TelephoneUserRegisterLogic) TelephoneUserRegister(req *types.TelephoneR
 				LoginIP:   req.IP,
 				UserAgent: req.UserAgent,
 				Success:   token != "",
-				Timestamp: time.Now().UnixMilli(),
+				Timestamp: timeutil.Now().UnixMilli(),
 			}
 			content, _ := loginLog.Marshal()
 			if err := l.svcCtx.Store.Log().Insert(l.ctx, &log.SystemLog{
 				Id:       0,
 				Type:     log.TypeLogin.Uint8(),
-				Date:     time.Now().Format("2006-01-02"),
+				Date:     timeutil.Now().Format("2006-01-02"),
 				ObjectID: userInfo.Id,
 				Content:  string(content),
 			}); err != nil {
@@ -212,13 +199,13 @@ func (l *TelephoneUserRegisterLogic) TelephoneUserRegister(req *types.TelephoneR
 				Identifier: phoneNumber,
 				RegisterIP: req.IP,
 				UserAgent:  req.UserAgent,
-				Timestamp:  time.Now().UnixMilli(),
+				Timestamp:  timeutil.Now().UnixMilli(),
 			}
 			content, _ = registerLog.Marshal()
 			if err := l.svcCtx.Store.Log().Insert(l.ctx, &log.SystemLog{
 				Type:     log.TypeRegister.Uint8(),
 				ObjectID: userInfo.Id,
-				Date:     time.Now().Format("2006-01-02"),
+				Date:     timeutil.Now().Format("2006-01-02"),
 				Content:  string(content),
 			}); err != nil {
 				l.Errorw("failed to insert login log",
@@ -228,7 +215,7 @@ func (l *TelephoneUserRegisterLogic) TelephoneUserRegister(req *types.TelephoneR
 			}
 		}
 	}()
-	return &types.LoginResponse{
+	return &dto.LoginResponse{
 		Token: token,
 	}, nil
 }
@@ -243,8 +230,8 @@ func (l *TelephoneUserRegisterLogic) activeTrial(store repository.Store, uid int
 		UserId:      uid,
 		OrderId:     0,
 		SubscribeId: sub.Id,
-		StartTime:   time.Now(),
-		ExpireTime:  tool.AddTime(l.svcCtx.Config.Register.TrialTimeUnit, l.svcCtx.Config.Register.TrialTime, time.Now()),
+		StartTime:   timeutil.Now(),
+		ExpireTime:  tool.AddTime(l.svcCtx.Config.Register.TrialTimeUnit, l.svcCtx.Config.Register.TrialTime, timeutil.Now()),
 		Traffic:     sub.Traffic,
 		Download:    0,
 		Upload:      0,

@@ -1,25 +1,31 @@
 package document
 
 import (
+	"context"
+
+	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/perfect-panel/server/internal/logic/admin/document"
+	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
-	"github.com/perfect-panel/server/pkg/hertzx"
+	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
 // Batch delete document
-func BatchDeleteDocumentHandler(svcCtx *svc.ServiceContext) func(c *hertzx.Context) {
-	return func(c *hertzx.Context) {
-		var req types.BatchDeleteDocumentRequest
-		_ = c.ShouldBind(&req)
+func BatchDeleteDocumentHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
+	return func(ctx context.Context, c *app.RequestContext) {
+		var req dto.BatchDeleteDocumentRequest
+		if err := httpx.ShouldBind(c, &req); err != nil {
+			result.ParamErrorResult(c, err)
+			return
+		}
 		validateErr := svcCtx.Validate(&req)
 		if validateErr != nil {
 			result.ParamErrorResult(c, validateErr)
 			return
 		}
 
-		l := document.NewBatchDeleteDocumentLogic(c.Request.Context(), svcCtx)
+		l := document.NewBatchDeleteDocumentLogic(ctx, svcCtx)
 		err := l.BatchDeleteDocument(&req)
 		result.HttpResult(c, nil, err)
 	}

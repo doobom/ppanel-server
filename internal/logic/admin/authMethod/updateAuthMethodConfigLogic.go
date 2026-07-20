@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 
 	"github.com/perfect-panel/server/initialize"
-	"github.com/perfect-panel/server/internal/model/auth"
+	"github.com/perfect-panel/server/internal/model/dto"
+	"github.com/perfect-panel/server/internal/model/entity/auth"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/email"
 	"github.com/perfect-panel/server/pkg/logger"
 	"github.com/perfect-panel/server/pkg/sms"
@@ -31,7 +31,7 @@ func NewUpdateAuthMethodConfigLogic(ctx context.Context, svcCtx *svc.ServiceCont
 	}
 }
 
-func (l *UpdateAuthMethodConfigLogic) UpdateAuthMethodConfig(req *types.UpdateAuthMethodConfigRequest) (resp *types.AuthMethodConfig, err error) {
+func (l *UpdateAuthMethodConfigLogic) UpdateAuthMethodConfig(req *dto.UpdateAuthMethodConfigRequest) (resp *dto.AuthMethodConfig, err error) {
 	method, err := l.svcCtx.Store.Auth().FindOneByMethod(l.ctx, req.Method)
 	if err != nil {
 		l.Errorw("find one by method failed", logger.Field("method", req.Method), logger.Field("error", err.Error()))
@@ -57,6 +57,20 @@ func (l *UpdateAuthMethodConfigLogic) UpdateAuthMethodConfig(req *types.UpdateAu
 			mobileConfig.Unmarshal(string(configs))
 			req.Config = mobileConfig
 		}
+		if req.Method == "device" {
+			configs, _ := json.Marshal(req.Config)
+			deviceConfig := new(auth.DeviceConfig)
+			if err := deviceConfig.Unmarshal(string(configs)); err != nil {
+				return nil, errors.Wrapf(xerr.NewErrCode(xerr.InvalidParams), "invalid device config: %v", err)
+			}
+			if deviceConfig.OnlyRealDevice && !deviceConfig.EnableSecurity {
+				return nil, errors.Wrap(xerr.NewErrCode(xerr.InvalidParams), "only_real_device requires enable_security")
+			}
+			if deviceConfig.EnableSecurity && deviceConfig.SecuritySecret == "" {
+				return nil, errors.Wrap(xerr.NewErrCode(xerr.InvalidParams), "device security secret is required")
+			}
+			req.Config = deviceConfig
+		}
 
 		bytes, err := json.Marshal(req.Config)
 		if err != nil {
@@ -72,7 +86,7 @@ func (l *UpdateAuthMethodConfigLogic) UpdateAuthMethodConfig(req *types.UpdateAu
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "update auth method failed: %v", err.Error())
 	}
 
-	resp = new(types.AuthMethodConfig)
+	resp = new(dto.AuthMethodConfig)
 	tool.DeepCopy(resp, method)
 	if method.Config != "" {
 		if err := json.Unmarshal([]byte(method.Config), &resp.Config); err != nil {

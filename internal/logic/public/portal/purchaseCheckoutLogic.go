@@ -7,22 +7,23 @@ import (
 	"strings"
 	"time"
 
-	"github.com/perfect-panel/server/internal/model/log"
+	"github.com/perfect-panel/server/internal/model/entity/log"
 	"github.com/perfect-panel/server/internal/report"
 	"github.com/perfect-panel/server/internal/repository"
 	"github.com/perfect-panel/server/pkg/constant"
 	"github.com/perfect-panel/server/pkg/exchangeRate"
+	"github.com/perfect-panel/server/pkg/timeutil"
 
 	paymentPlatform "github.com/perfect-panel/server/pkg/payment"
 
 	"github.com/hibiken/asynq"
-	"github.com/perfect-panel/server/internal/model/user"
+	"github.com/perfect-panel/server/internal/model/entity/user"
 	queueType "github.com/perfect-panel/server/queue/types"
 
-	"github.com/perfect-panel/server/internal/model/order"
-	"github.com/perfect-panel/server/internal/model/payment"
+	"github.com/perfect-panel/server/internal/model/dto"
+	"github.com/perfect-panel/server/internal/model/entity/order"
+	"github.com/perfect-panel/server/internal/model/entity/payment"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/logger"
 	"github.com/perfect-panel/server/pkg/payment/alipay"
 	"github.com/perfect-panel/server/pkg/payment/epay"
@@ -51,7 +52,7 @@ func NewPurchaseCheckoutLogic(ctx context.Context, svcCtx *svc.ServiceContext) *
 
 // PurchaseCheckout processes the checkout for an order using the specified payment method
 // It validates the order, retrieves payment configuration, and routes to the appropriate payment handler
-func (l *PurchaseCheckoutLogic) PurchaseCheckout(req *types.CheckoutOrderRequest) (resp *types.CheckoutOrderResponse, err error) {
+func (l *PurchaseCheckoutLogic) PurchaseCheckout(req *dto.CheckoutOrderRequest) (resp *dto.CheckoutOrderResponse, err error) {
 
 	// Validate and retrieve order information
 	orderInfo, err := l.svcCtx.Store.Order().FindOneByOrderNo(l.ctx, req.OrderNo)
@@ -81,7 +82,7 @@ func (l *PurchaseCheckoutLogic) PurchaseCheckout(req *types.CheckoutOrderRequest
 			l.Logger.Error("[PurchaseCheckout] epay error", logger.Field("error", err.Error()))
 			return nil, errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "epayPayment error: %v", err.Error())
 		}
-		resp = &types.CheckoutOrderResponse{
+		resp = &dto.CheckoutOrderResponse{
 			CheckoutUrl: url,
 			Type:        "url", // Client should redirect to URL
 		}
@@ -92,7 +93,7 @@ func (l *PurchaseCheckoutLogic) PurchaseCheckout(req *types.CheckoutOrderRequest
 		if err != nil {
 			return nil, errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "stripePayment error: %v", err.Error())
 		}
-		resp = &types.CheckoutOrderResponse{
+		resp = &dto.CheckoutOrderResponse{
 			Type:   "stripe", // Client should use Stripe SDK
 			Stripe: stripePayment,
 		}
@@ -104,7 +105,7 @@ func (l *PurchaseCheckoutLogic) PurchaseCheckout(req *types.CheckoutOrderRequest
 			l.Errorw("[PurchaseCheckout] alipayF2fPayment error", logger.Field("error", err.Error()))
 			return nil, errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "alipayF2fPayment error: %v", err.Error())
 		}
-		resp = &types.CheckoutOrderResponse{
+		resp = &dto.CheckoutOrderResponse{
 			Type:        "qr", // Client should display QR code
 			CheckoutUrl: url,
 		}
@@ -115,7 +116,7 @@ func (l *PurchaseCheckoutLogic) PurchaseCheckout(req *types.CheckoutOrderRequest
 		if err != nil {
 			return nil, errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "epayPayment error: %v", err.Error())
 		}
-		resp = &types.CheckoutOrderResponse{
+		resp = &dto.CheckoutOrderResponse{
 			CheckoutUrl: url,
 			Type:        "url", // Client should redirect to URL
 		}
@@ -139,7 +140,7 @@ func (l *PurchaseCheckoutLogic) PurchaseCheckout(req *types.CheckoutOrderRequest
 			return nil, err
 		}
 
-		resp = &types.CheckoutOrderResponse{
+		resp = &dto.CheckoutOrderResponse{
 			Type: "balance", // Payment completed immediately
 		}
 
@@ -181,6 +182,9 @@ func (l *PurchaseCheckoutLogic) alipayF2fPayment(pay *payment.Payment, info *ord
 		NotifyURL:   notifyUrl,
 		Sandbox:     f2FConfig.Sandbox,
 	})
+	if client == nil {
+		return "", errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "initialize Alipay client failed")
+	}
 
 	// Convert order amount to CNY using current exchange rate
 	amount, err := l.queryExchangeRate("CNY", info.Amount)
@@ -188,7 +192,13 @@ func (l *PurchaseCheckoutLogic) alipayF2fPayment(pay *payment.Payment, info *ord
 		l.Errorw("[PurchaseCheckout] queryExchangeRate error", logger.Field("error", err.Error()))
 		return "", errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "queryExchangeRate error: %s", err.Error())
 	}
-	convertAmount := int64(amount * 100) // Convert to cents for API
+	convertAmount, err := paymentPlatform.ParseAmount(epay.FormatMoney(amount))
+	if err != nil {
+		return "", errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "invalid Alipay amount: %v", err)
+	}
+	if err := l.persistPaymentExpectation(info, convertAmount, "CNY"); err != nil {
+		return "", err
+	}
 
 	// Create pre-payment trade and generate QR code
 	QRCode, err := client.PreCreateTrade(l.ctx, alipay.Order{
@@ -204,7 +214,7 @@ func (l *PurchaseCheckoutLogic) alipayF2fPayment(pay *payment.Payment, info *ord
 
 // stripePayment processes Stripe payment by creating a payment sheet
 // It supports various payment methods including WeChat Pay and Alipay through Stripe
-func (l *PurchaseCheckoutLogic) stripePayment(config string, info *order.Order, identifier string) (*types.StripePayment, error) {
+func (l *PurchaseCheckoutLogic) stripePayment(config string, info *order.Order, identifier string) (*dto.StripePayment, error) {
 	// Parse Stripe configuration from payment settings
 	stripeConfig := &payment.StripeConfig{}
 
@@ -219,6 +229,9 @@ func (l *PurchaseCheckoutLogic) stripePayment(config string, info *order.Order, 
 		PublicKey:     stripeConfig.PublicKey,
 		WebhookSecret: stripeConfig.WebhookSecret,
 	})
+	if err := l.persistPaymentExpectation(info, info.Amount, strings.ToUpper(l.svcCtx.Config.Currency.Unit)); err != nil {
+		return nil, err
+	}
 
 	// Create Stripe payment sheet for client-side processing
 	result, err := client.CreatePaymentSheet(&stripe.Order{
@@ -237,7 +250,7 @@ func (l *PurchaseCheckoutLogic) stripePayment(config string, info *order.Order, 
 	}
 
 	// Prepare response data for client-side Stripe integration
-	stripePayment := &types.StripePayment{
+	stripePayment := &dto.StripePayment{
 		PublishableKey: stripeConfig.PublicKey,
 		ClientSecret:   result.ClientSecret,
 		Method:         stripeConfig.Payment,
@@ -275,6 +288,13 @@ func (l *PurchaseCheckoutLogic) epayPayment(config *payment.Payment, info *order
 		}
 	} else {
 		amount = float64(info.Amount) / float64(100)
+	}
+	expectedAmount, err := epay.ParseMoney(epay.FormatMoney(amount))
+	if err != nil {
+		return "", errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "invalid EPay amount: %v", err)
+	}
+	if err := l.persistPaymentExpectation(info, expectedAmount, "CNY"); err != nil {
+		return "", err
 	}
 
 	// gateway mod
@@ -335,6 +355,13 @@ func (l *PurchaseCheckoutLogic) CryptoSaaSPayment(config *payment.Payment, info 
 		}
 	} else {
 		amount = float64(info.Amount) / float64(100)
+	}
+	expectedAmount, err := epay.ParseMoney(epay.FormatMoney(amount))
+	if err != nil {
+		return "", errors.Wrapf(xerr.NewErrCode(xerr.ERROR), "invalid CryptoSaaS amount: %v", err)
+	}
+	if err := l.persistPaymentExpectation(info, expectedAmount, "CNY"); err != nil {
+		return "", err
 	}
 
 	// gateway mod
@@ -403,10 +430,28 @@ func (l *PurchaseCheckoutLogic) queryExchangeRate(to string, src int64) (amount 
 	return result * amount, nil
 }
 
+func (l *PurchaseCheckoutLogic) persistPaymentExpectation(info *order.Order, amount int64, currency string) error {
+	updated, err := l.svcCtx.Store.Order().UpdatePaymentExpectation(l.ctx, info.OrderNo, amount, currency)
+	if err != nil {
+		l.Errorw("[PurchaseCheckout] Save payment expectation failed",
+			logger.Field("error", err.Error()),
+			logger.Field("orderNo", info.OrderNo),
+		)
+		return errors.Wrapf(xerr.NewErrCode(xerr.DatabaseUpdateError), "save payment expectation: %v", err)
+	}
+	if !updated {
+		return errors.Wrapf(xerr.NewErrCode(xerr.OrderStatusError), "order is no longer pending")
+	}
+	info.PaymentAmount = amount
+	info.PaymentCurrency = currency
+	return nil
+}
+
 // balancePayment processes balance payment with gift amount priority logic
 // It prioritizes using gift amount first, then regular balance, and creates proper audit logs
 func (l *PurchaseCheckoutLogic) balancePayment(u *user.User, o *order.Order) error {
 	var err error
+	var paidUser *user.User
 	if o.Amount == 0 {
 		// No payment required for zero-amount orders
 		l.Logger.Info(
@@ -414,7 +459,7 @@ func (l *PurchaseCheckoutLogic) balancePayment(u *user.User, o *order.Order) err
 			logger.Field("orderNo", o.OrderNo),
 			logger.Field("userId", u.Id),
 		)
-		err = l.svcCtx.Store.Order().UpdateOrderStatus(l.ctx, o.OrderNo, 2)
+		updated, err := l.svcCtx.Store.Order().UpdateOrderStatusFrom(l.ctx, o.OrderNo, 1, 2)
 		if err != nil {
 			l.Errorw("[PurchaseCheckout] Update order status error",
 				logger.Field("error", err.Error()),
@@ -422,12 +467,26 @@ func (l *PurchaseCheckoutLogic) balancePayment(u *user.User, o *order.Order) err
 				logger.Field("userId", u.Id))
 			return errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "Update order status error: %s", err.Error())
 		}
+		if !updated {
+			return errors.Wrapf(xerr.NewErrCode(xerr.OrderStatusError), "order is no longer pending")
+		}
 		goto activation
 	}
 
 	err = l.svcCtx.Store.InTx(l.ctx, func(store repository.Store) error {
-		// Retrieve latest user information inside the transaction.
-		userInfo, err := store.User().FindOne(l.ctx, u.Id)
+		// Lock the order first so concurrent checkout requests for the same
+		// order cannot both reach the balance debit path.
+		orderInfo, err := store.Order().FindOneByOrderNoForUpdate(l.ctx, o.OrderNo)
+		if err != nil {
+			return err
+		}
+		if orderInfo.Status != 1 {
+			return errors.Wrapf(xerr.NewErrCode(xerr.OrderStatusError), "order is no longer pending")
+		}
+
+		// Retrieve the latest user information inside the transaction without
+		// Redis cache and lock the row before checking or changing balances.
+		userInfo, err := store.User().FindOneForUpdate(l.ctx, u.Id)
 		if err != nil {
 			return err
 		}
@@ -457,9 +516,8 @@ func (l *PurchaseCheckoutLogic) balancePayment(u *user.User, o *order.Order) err
 		userInfo.GiftAmount -= giftUsed
 		userInfo.Balance -= balanceUsed
 
-		// Save updated user information
-		err = store.User().Update(l.ctx, userInfo)
-		if err != nil {
+		// Save only the balance fields; do not write back a cached/stale user row.
+		if err = store.User().UpdateBalanceFields(l.ctx, userInfo); err != nil {
 			return err
 		}
 
@@ -477,7 +535,7 @@ func (l *PurchaseCheckoutLogic) balancePayment(u *user.User, o *order.Order) err
 			err = store.Log().Insert(l.ctx, &log.SystemLog{
 				Type:     log.TypeGift.Uint8(),
 				ObjectID: userInfo.Id,
-				Date:     time.Now().Format(time.DateOnly),
+				Date:     timeutil.Now().Format(time.DateOnly),
 				Content:  string(content),
 			})
 			if err != nil {
@@ -492,13 +550,13 @@ func (l *PurchaseCheckoutLogic) balancePayment(u *user.User, o *order.Order) err
 				Type:      log.BalanceTypePayment, // Type 3 represents payment deduction
 				OrderNo:   o.OrderNo,
 				Balance:   userInfo.Balance,
-				Timestamp: time.Now().UnixMilli(),
+				Timestamp: timeutil.Now().UnixMilli(),
 			}
 			content, _ := balanceLog.Marshal()
 			err = store.Log().Insert(l.ctx, &log.SystemLog{
 				Type:     log.TypeBalance.Uint8(),
 				ObjectID: userInfo.Id,
-				Date:     time.Now().Format(time.DateOnly),
+				Date:     timeutil.Now().Format(time.DateOnly),
 				Content:  string(content),
 			})
 			if err != nil {
@@ -506,15 +564,25 @@ func (l *PurchaseCheckoutLogic) balancePayment(u *user.User, o *order.Order) err
 			}
 		}
 
-		// Store gift amount used in order for potential refund tracking
-		o.GiftAmount = giftUsed
-		err = store.Order().Update(l.ctx, o)
-		if err != nil {
-			return err
+		// Store gift amount used in order for potential refund tracking.
+		// Keep any gift amount that was already recorded at order creation.
+		if giftUsed > 0 {
+			orderInfo.GiftAmount += giftUsed
+			if err = store.Order().Update(l.ctx, orderInfo); err != nil {
+				return err
+			}
 		}
 
 		// Mark order as paid (status = 2)
-		return store.Order().UpdateOrderStatus(l.ctx, o.OrderNo, 2)
+		updated, err := store.Order().UpdateOrderStatusFrom(l.ctx, o.OrderNo, 1, 2)
+		if err != nil {
+			return err
+		}
+		if !updated {
+			return errors.Wrapf(xerr.NewErrCode(xerr.OrderStatusError), "order is no longer pending")
+		}
+		paidUser = userInfo
+		return nil
 	})
 
 	if err != nil {
@@ -523,6 +591,13 @@ func (l *PurchaseCheckoutLogic) balancePayment(u *user.User, o *order.Order) err
 			logger.Field("orderNo", o.OrderNo),
 			logger.Field("userId", u.Id))
 		return err
+	}
+	if paidUser != nil {
+		if cacheErr := l.svcCtx.Store.User().ClearUserCache(l.ctx, paidUser); cacheErr != nil {
+			l.Errorw("[PurchaseCheckout] Clear user cache error",
+				logger.Field("error", cacheErr.Error()),
+				logger.Field("userId", paidUser.Id))
+		}
 	}
 
 activation:
@@ -537,7 +612,10 @@ activation:
 	}
 
 	task := asynq.NewTask(queueType.ForthwithActivateOrder, bytes, asynq.MaxRetry(5))
-	_, err = l.svcCtx.Queue.EnqueueContext(l.ctx, task)
+	_, err = l.svcCtx.Queue.EnqueueContext(l.ctx, task, asynq.TaskID(queueType.ActivationTaskID(o.OrderNo)))
+	if errors.Is(err, asynq.ErrTaskIDConflict) {
+		err = nil
+	}
 	if err != nil {
 		l.Errorw("[PurchaseCheckout] Enqueue activation task error", logger.Field("error", err.Error()))
 		return err

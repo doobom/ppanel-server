@@ -9,8 +9,8 @@ import (
 	"github.com/perfect-panel/server/internal/handler"
 	"github.com/perfect-panel/server/internal/middleware"
 	"github.com/perfect-panel/server/internal/plugin"
+	"github.com/perfect-panel/server/internal/route"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/pkg/hertzx"
 	"github.com/perfect-panel/server/pkg/logger"
 )
 
@@ -31,20 +31,19 @@ func New(svc *svc.ServiceContext, addr string, tlsConfig *tls.Config) *Server {
 }
 
 func newServer(svc *svc.ServiceContext, opts []config.Option) *Server {
-	engine := hertzx.Default(opts...)
-	engine.Hertz().Use(middleware.TraceMiddleware(svc), middleware.LoggerMiddleware(svc), middleware.CorsMiddleware)
+	engine := server.Default(opts...)
+	engine.Use(middleware.TraceMiddleware(svc), middleware.LoggerMiddleware(svc), middleware.CorsMiddleware)
 
-	handler.RegisterNativeHandlers(engine.Hertz(), svc)
-	handler.RegisterHandlers(engine, svc)
+	route.RegisterHandlers(engine, svc)
 	handler.RegisterTelegramHandlers(engine, svc)
 	handler.RegisterNotifyHandlers(engine, svc)
 
 	// 注册插件路由
 	if mgr, ok := svc.PluginMgr.(*plugin.Manager); ok {
-		handler.RegisterPluginHandlers(engine, svc, mgr)
+		route.RegisterPluginDispatcherRoutes(engine, svc, mgr)
 	}
 
-	return &Server{h: engine.Hertz()}
+	return &Server{h: engine}
 }
 
 func (s *Server) Start() {

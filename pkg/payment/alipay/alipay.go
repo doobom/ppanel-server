@@ -5,6 +5,7 @@ import (
 	"net/url"
 
 	"github.com/perfect-panel/server/pkg/logger"
+	paymentUtil "github.com/perfect-panel/server/pkg/payment"
 	"github.com/perfect-panel/server/pkg/tool"
 	"github.com/pkg/errors"
 	"github.com/smartwalle/alipay/v3"
@@ -23,6 +24,8 @@ type Notification struct {
 	OrderNo string
 	Amount  int64
 	Status  Status
+	TradeNo string
+	AppId   string
 }
 
 type Status string
@@ -47,12 +50,13 @@ type Order struct {
 func NewClient(c Config) *Client {
 	client, err := alipay.New(c.AppId, c.PrivateKey, !c.Sandbox)
 	if err != nil {
-		logger.Error("[Alipay] NewClient failed: ", logger.Field("errors", err), logger.Field("config", c))
+		logger.Error("[Alipay] NewClient failed: ", logger.Field("errors", err), logger.Field("appId", c.AppId), logger.Field("sandbox", c.Sandbox))
 		return nil
 	}
 	err = client.LoadAliPayPublicKey(c.PublicKey)
 	if err != nil {
-		logger.Error("[Alipay] NewClient failed: ", logger.Field("errors", err), logger.Field("config", c))
+		logger.Error("[Alipay] Load public key failed: ", logger.Field("errors", err), logger.Field("appId", c.AppId), logger.Field("sandbox", c.Sandbox))
+		return nil
 	}
 	return &Client{
 		Config: c,
@@ -105,10 +109,16 @@ func (c *Client) DecodeNotification(form url.Values) (*Notification, error) {
 	if err != nil {
 		return nil, err
 	}
+	amount, err := paymentUtil.ParseAmount(notify.TotalAmount)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid notification amount")
+	}
 
 	return &Notification{
 		OrderNo: notify.OutTradeNo,
-		Amount:  int64(tool.FormatStringToFloat(notify.TotalAmount) * 100),
+		Amount:  amount,
 		Status:  Status(notify.TradeStatus),
+		TradeNo: notify.TradeNo,
+		AppId:   notify.AppId,
 	}, nil
 }

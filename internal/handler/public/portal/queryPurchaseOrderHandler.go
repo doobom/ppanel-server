@@ -1,26 +1,32 @@
 package portal
 
 import (
+	"context"
+
+	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/perfect-panel/server/internal/logic/public/portal"
+	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
-	"github.com/perfect-panel/server/pkg/hertzx"
+	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
 // Query Purchase Order
-func QueryPurchaseOrderHandler(svcCtx *svc.ServiceContext) func(c *hertzx.Context) {
-	return func(c *hertzx.Context) {
-		var req types.QueryPurchaseOrderRequest
-		_ = c.ShouldBind(&req)
+func QueryPurchaseOrderHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
+	return func(c context.Context, ctx *app.RequestContext) {
+		var req dto.QueryPurchaseOrderRequest
+		if err := httpx.ShouldBind(ctx, &req); err != nil {
+			result.ParamErrorResult(ctx, err)
+			return
+		}
 		validateErr := svcCtx.Validate(&req)
 		if validateErr != nil {
-			result.ParamErrorResult(c, validateErr)
+			result.ParamErrorResult(ctx, validateErr)
 			return
 		}
 
-		l := portal.NewQueryPurchaseOrderLogic(c.Request.Context(), svcCtx)
+		l := portal.NewQueryPurchaseOrderLogic(c, svcCtx)
 		resp, err := l.QueryPurchaseOrder(&req)
-		result.HttpResult(c, resp, err)
+		result.HttpResult(ctx, resp, err)
 	}
 }

@@ -1,79 +1,123 @@
 package notify
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 
+	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"github.com/perfect-panel/server/internal/logic/notify"
+	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/constant"
-	"github.com/perfect-panel/server/pkg/hertzx"
 	"github.com/perfect-panel/server/pkg/logger"
 	"github.com/perfect-panel/server/pkg/payment"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
+const maxStripePayloadSize = 65_536
+
+var errStripePayloadTooLarge = errors.New("http: request body too large")
+
 // PaymentNotifyHandler Payment Notify
-func PaymentNotifyHandler(svcCtx *svc.ServiceContext) func(c *hertzx.Context) {
-	return func(c *hertzx.Context) {
-		platform, ok := c.Request.Context().Value(constant.CtxKeyPlatform).(string)
+func PaymentNotifyHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
+	return func(c context.Context, ctx *app.RequestContext) {
+		platform, ok := c.Value(constant.CtxKeyPlatform).(string)
 		if !ok {
-			logger.WithContext(c.Request.Context()).Errorf("platform not found")
-			result.HttpResult(c, nil, fmt.Errorf("platform not found"))
+			logger.WithContext(c).Errorf("platform not found")
+			result.HttpResult(ctx, nil, fmt.Errorf("platform not found"))
 			return
 		}
 
 		switch payment.ParsePlatform(platform) {
 		case payment.EPay, payment.CryptoSaaS:
-			req := &types.EPayNotifyRequest{}
-			if err := c.ShouldBind(req); err != nil {
-				result.HttpResult(c, nil, err)
+			params, err := uniqueFormValues(nativeFormValues(ctx))
+			if err != nil {
+				logger.WithContext(c).Errorw("[PaymentNotifyHandler] ShouldBind failed", logger.Field("error", err.Error()))
+				ctx.String(consts.StatusBadRequest, "invalid request")
 				return
 			}
-			if err := c.Request.ParseForm(); err != nil {
-				logger.WithContext(c.Request.Context()).Errorw("[PaymentNotifyHandler] ParseForm failed", logger.Field("error", err.Error()))
-			}
-			l := notify.NewEPayNotifyLogic(c.Request.Context(), svcCtx, notify.EPayNotifyMeta{
-				Method: c.Request.Method,
-				Params: formValues(c.Request.Form),
+			req := epayNotifyRequest(params)
+			l := notify.NewEPayNotifyLogic(c, svcCtx, notify.EPayNotifyMeta{
+				Method: string(ctx.Method()),
+				Params: params,
 			})
 			if err := l.EPayNotify(req); err != nil {
-				logger.WithContext(c.Request.Context()).Errorf("EPayNotify failed: %v", err.Error())
-				c.String(http.StatusBadRequest, err.Error())
+				logger.WithContext(c).Errorf("EPayNotify failed: %v", err.Error())
+				ctx.String(consts.StatusBadRequest, err.Error())
 				return
 			}
-			c.String(http.StatusOK, "%s", "success")
+			ctx.String(consts.StatusOK, "success")
 		case payment.Stripe:
-			l := notify.NewStripeNotifyLogic(c.Request.Context(), svcCtx)
-			if err := l.StripeNotify(c.Request, c.Writer); err != nil {
-				result.HttpResult(c, nil, err)
+			payload, err := stripePayload(ctx.Request.Body())
+			if err != nil {
+				result.HttpResult(ctx, nil, err)
 				return
 			}
-			result.HttpResult(c, nil, nil)
+			l := notify.NewStripeNotifyLogic(c, svcCtx)
+			if err := l.StripeNotify(payload, string(ctx.GetHeader("Stripe-Signature"))); err != nil {
+				result.HttpResult(ctx, nil, err)
+				return
+			}
+			result.HttpResult(ctx, nil, nil)
 
 		case payment.AlipayF2F:
-			l := notify.NewAlipayNotifyLogic(c.Request.Context(), svcCtx)
-			if err := l.AlipayNotify(c.Request); err != nil {
-				result.HttpResult(c, nil, err)
+			l := notify.NewAlipayNotifyLogic(c, svcCtx)
+			if err := l.AlipayNotify(nativeFormValues(ctx)); err != nil {
+				result.HttpResult(ctx, nil, err)
 				return
 			}
 			// Return success to alipay
-			c.String(http.StatusOK, "%s", "success")
+			ctx.String(consts.StatusOK, "success")
 
 		default:
-			logger.WithContext(c.Request.Context()).Errorf("platform %s not support", platform)
+			logger.WithContext(c).Errorf("platform %s not support", platform)
 		}
 	}
 }
 
-func formValues(values url.Values) map[string]string {
-	params := make(map[string]string)
-	for key, value := range values {
-		if len(value) > 0 {
-			params[key] = value[0]
-		}
+func nativeFormValues(ctx *app.RequestContext) url.Values {
+	values := make(url.Values)
+	ctx.PostArgs().VisitAll(func(key, value []byte) {
+		values.Add(string(key), string(value))
+	})
+	ctx.QueryArgs().VisitAll(func(key, value []byte) {
+		values.Add(string(key), string(value))
+	})
+	return values
+}
+
+func stripePayload(payload []byte) ([]byte, error) {
+	if len(payload) > maxStripePayloadSize {
+		return nil, errStripePayloadTooLarge
 	}
-	return params
+	return payload, nil
+}
+
+func uniqueFormValues(values url.Values) (map[string]string, error) {
+	params := make(map[string]string, len(values))
+	for key, value := range values {
+		if len(value) != 1 {
+			return nil, fmt.Errorf("callback parameter %q must occur exactly once", key)
+		}
+		params[key] = value[0]
+	}
+	return params, nil
+}
+
+func epayNotifyRequest(params map[string]string) *dto.EPayNotifyRequest {
+	return &dto.EPayNotifyRequest{
+		Pid:         params["pid"],
+		TradeNo:     params["trade_no"],
+		OutTradeNo:  params["out_trade_no"],
+		Type:        params["type"],
+		Name:        params["name"],
+		Money:       params["money"],
+		TradeStatus: params["trade_status"],
+		Param:       params["param"],
+		Sign:        params["sign"],
+		SignType:    params["sign_type"],
+	}
 }

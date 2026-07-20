@@ -1,12 +1,14 @@
 package auth
 
 import (
+	"context"
 	"time"
 
+	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/perfect-panel/server/internal/logic/auth"
+	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
-	"github.com/perfect-panel/server/pkg/hertzx"
+	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 	"github.com/perfect-panel/server/pkg/turnstile"
 	"github.com/perfect-panel/server/pkg/xerr"
@@ -14,19 +16,22 @@ import (
 )
 
 // User login
-func UserLoginHandler(svcCtx *svc.ServiceContext) func(c *hertzx.Context) {
-	return func(c *hertzx.Context) {
-		var req types.UserLoginRequest
-		_ = c.ShouldBind(&req)
+func UserLoginHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
+	return func(ctx context.Context, c *app.RequestContext) {
+		var req dto.UserLoginRequest
+		if err := httpx.ShouldBind(c, &req); err != nil {
+			result.ParamErrorResult(c, err)
+			return
+		}
 		// get client ip
 		req.IP = c.ClientIP()
-		req.UserAgent = c.Request.UserAgent()
-		if svcCtx.Config.Verify.LoginVerify && !svcCtx.Config.Debug {
+		req.UserAgent = string(c.UserAgent())
+		if svcCtx.Config.Verify.LoginVerify {
 			verifyTurns := turnstile.New(turnstile.Config{
 				Secret:  svcCtx.Config.Verify.TurnstileSecret,
 				Timeout: 3 * time.Second,
 			})
-			if verify, err := verifyTurns.Verify(c, req.CfToken, req.IP); err != nil || !verify {
+			if verify, err := verifyTurns.Verify(ctx, req.CfToken, req.IP); err != nil || !verify {
 				err = errors.Wrapf(xerr.NewErrCode(xerr.TooManyRequests), "error: %v, verify: %v", err, verify)
 				result.HttpResult(c, nil, err)
 				return
@@ -38,7 +43,7 @@ func UserLoginHandler(svcCtx *svc.ServiceContext) func(c *hertzx.Context) {
 			return
 		}
 
-		l := auth.NewUserLoginLogic(c.Request.Context(), svcCtx)
+		l := auth.NewUserLoginLogic(ctx, svcCtx)
 		resp, err := l.UserLogin(&req)
 		result.HttpResult(c, resp, err)
 	}

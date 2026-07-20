@@ -1,26 +1,32 @@
 package user
 
 import (
+	"context"
+
+	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/perfect-panel/server/internal/logic/public/user"
+	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
-	"github.com/perfect-panel/server/pkg/hertzx"
+	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
 // Update Bind Email
-func UpdateBindEmailHandler(svcCtx *svc.ServiceContext) func(c *hertzx.Context) {
-	return func(c *hertzx.Context) {
-		var req types.UpdateBindEmailRequest
-		_ = c.ShouldBind(&req)
+func UpdateBindEmailHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
+	return func(c context.Context, ctx *app.RequestContext) {
+		var req dto.UpdateBindEmailRequest
+		if err := httpx.ShouldBind(ctx, &req); err != nil {
+			result.ParamErrorResult(ctx, err)
+			return
+		}
 		validateErr := svcCtx.Validate(&req)
 		if validateErr != nil {
-			result.ParamErrorResult(c, validateErr)
+			result.ParamErrorResult(ctx, validateErr)
 			return
 		}
 
-		l := user.NewUpdateBindEmailLogic(c.Request.Context(), svcCtx)
+		l := user.NewUpdateBindEmailLogic(c, svcCtx)
 		err := l.UpdateBindEmail(&req)
-		result.HttpResult(c, nil, err)
+		result.HttpResult(ctx, nil, err)
 	}
 }

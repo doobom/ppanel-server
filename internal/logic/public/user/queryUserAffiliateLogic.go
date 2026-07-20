@@ -3,15 +3,15 @@ package user
 import (
 	"context"
 
-	"github.com/perfect-panel/server/internal/model/log"
+	"github.com/perfect-panel/server/internal/model/entity/log"
 	"github.com/perfect-panel/server/pkg/constant"
 
-	"github.com/perfect-panel/server/internal/model/user"
+	"github.com/perfect-panel/server/internal/model/entity/user"
 	"github.com/perfect-panel/server/pkg/xerr"
 	"github.com/pkg/errors"
 
+	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/logger"
 )
 
@@ -30,34 +30,23 @@ func NewQueryUserAffiliateLogic(ctx context.Context, svcCtx *svc.ServiceContext)
 	}
 }
 
-func (l *QueryUserAffiliateLogic) QueryUserAffiliate() (resp *types.QueryUserAffiliateCountResponse, err error) {
+func (l *QueryUserAffiliateLogic) QueryUserAffiliate() (resp *dto.QueryUserAffiliateCountResponse, err error) {
 	u, ok := l.ctx.Value(constant.CtxKeyUser).(*user.User)
 	if !ok {
 		logger.Error("current user is not found in context")
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.InvalidAccess), "Invalid Access")
 	}
-	var sum int64
 	total, err := l.svcCtx.Store.User().CountAffiliates(l.ctx, u.Id)
 	if err != nil {
 		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "Query User Affiliate failed: %v", err)
 	}
-	data, _, err := l.svcCtx.Store.Log().FilterSystemLog(l.ctx, &log.FilterParams{
-		Page:     1,
-		Size:     99999,
-		Type:     log.TypeCommission.Uint8(),
-		ObjectID: u.Id,
-	})
-
-	for _, datum := range data {
-		content := log.Commission{}
-		if err = content.Unmarshal([]byte(datum.Content)); err != nil {
-			l.Errorf("[QueryUserAffiliate] unmarshal comission log failed: %v", err.Error())
-			continue
-		}
-		sum += content.Amount
+	sum, err := l.svcCtx.Store.Log().SumAmountByTypeAndObjectID(l.ctx, log.TypeCommission.Uint8(), u.Id)
+	if err != nil {
+		l.Errorf("[QueryUserAffiliate] sum commission amount failed: %v", err.Error())
+		return nil, errors.Wrapf(xerr.NewErrCode(xerr.DatabaseQueryError), "Query User Affiliate sum commission failed: %v", err)
 	}
 
-	return &types.QueryUserAffiliateCountResponse{
+	return &dto.QueryUserAffiliateCountResponse{
 		Registers:       total,
 		TotalCommission: sum,
 	}, nil

@@ -6,10 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/perfect-panel/server/internal/model/log"
+	"github.com/perfect-panel/server/internal/model/dto"
+	"github.com/perfect-panel/server/internal/model/entity/log"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
 	"github.com/perfect-panel/server/pkg/logger"
+	"github.com/perfect-panel/server/pkg/timeutil"
 	"github.com/perfect-panel/server/pkg/tool"
 	"github.com/perfect-panel/server/pkg/xerr"
 	"github.com/pkg/errors"
@@ -30,7 +31,7 @@ func NewUpdateUserBasicInfoLogic(ctx context.Context, svcCtx *svc.ServiceContext
 	}
 }
 
-func (l *UpdateUserBasicInfoLogic) UpdateUserBasicInfo(req *types.UpdateUserBasiceInfoRequest) error {
+func (l *UpdateUserBasicInfoLogic) UpdateUserBasicInfo(req *dto.UpdateUserBasiceInfoRequest) error {
 	userInfo, err := l.svcCtx.Store.User().FindOne(l.ctx, req.UserId)
 	if err != nil {
 		l.Errorw("[UpdateUserBasicInfoLogic] Find User Error:", logger.Field("err", err.Error()), logger.Field("userId", req.UserId))
@@ -50,13 +51,13 @@ func (l *UpdateUserBasicInfoLogic) UpdateUserBasicInfo(req *types.UpdateUserBasi
 			Amount:    change,
 			OrderNo:   "",
 			Balance:   req.Balance,
-			Timestamp: time.Now().UnixMilli(),
+			Timestamp: timeutil.Now().UnixMilli(),
 		}
 		content, _ := balanceLog.Marshal()
 
 		err = l.svcCtx.Store.Log().Insert(l.ctx, &log.SystemLog{
 			Type:     log.TypeBalance.Uint8(),
-			Date:     time.Now().Format(time.DateOnly),
+			Date:     timeutil.Now().Format(time.DateOnly),
 			ObjectID: userInfo.Id,
 			Content:  string(content),
 		})
@@ -80,13 +81,13 @@ func (l *UpdateUserBasicInfoLogic) UpdateUserBasicInfo(req *types.UpdateUserBasi
 				Amount:    change,
 				Balance:   req.GiftAmount,
 				Remark:    "Admin adjustment",
-				Timestamp: time.Now().UnixMilli(),
+				Timestamp: timeutil.Now().UnixMilli(),
 			}
 			content, _ := giftLog.Marshal()
 			// Add gift amount change log
 			err = l.svcCtx.Store.Log().Insert(l.ctx, &log.SystemLog{
 				Type:     log.TypeGift.Uint8(),
-				Date:     time.Now().Format(time.DateOnly),
+				Date:     timeutil.Now().Format(time.DateOnly),
 				ObjectID: userInfo.Id,
 				Content:  string(content),
 			})
@@ -102,13 +103,13 @@ func (l *UpdateUserBasicInfoLogic) UpdateUserBasicInfo(req *types.UpdateUserBasi
 		commentLog := log.Commission{
 			Type:      log.CommissionTypeAdjust,
 			Amount:    req.Commission - userInfo.Commission,
-			Timestamp: time.Now().UnixMilli(),
+			Timestamp: timeutil.Now().UnixMilli(),
 		}
 
 		content, _ := commentLog.Marshal()
 		err = l.svcCtx.Store.Log().Insert(l.ctx, &log.SystemLog{
 			Type:     log.TypeCommission.Uint8(),
-			Date:     time.Now().Format(time.DateOnly),
+			Date:     timeutil.Now().Format(time.DateOnly),
 			ObjectID: userInfo.Id,
 			Content:  string(content),
 		})

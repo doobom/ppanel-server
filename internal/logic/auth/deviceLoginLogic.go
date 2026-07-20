@@ -6,13 +6,16 @@ import (
 	"time"
 
 	"github.com/perfect-panel/server/internal/config"
-	"github.com/perfect-panel/server/internal/model/log"
-	"github.com/perfect-panel/server/internal/model/user"
+	"github.com/perfect-panel/server/internal/logic/auth/registerpolicy"
+	"github.com/perfect-panel/server/internal/model/dto"
+	"github.com/perfect-panel/server/internal/model/entity/log"
+	"github.com/perfect-panel/server/internal/model/entity/user"
 	"github.com/perfect-panel/server/internal/repository"
 	"github.com/perfect-panel/server/internal/svc"
-	"github.com/perfect-panel/server/internal/types"
+	"github.com/perfect-panel/server/pkg/constant"
 	"github.com/perfect-panel/server/pkg/jwt"
 	"github.com/perfect-panel/server/pkg/logger"
+	"github.com/perfect-panel/server/pkg/timeutil"
 	"github.com/perfect-panel/server/pkg/tool"
 	"github.com/perfect-panel/server/pkg/uuidx"
 	"github.com/perfect-panel/server/pkg/xerr"
@@ -35,9 +38,15 @@ func NewDeviceLoginLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Devic
 	}
 }
 
-func (l *DeviceLoginLogic) DeviceLogin(req *types.DeviceLoginRequest) (resp *types.LoginResponse, err error) {
+func (l *DeviceLoginLogic) DeviceLogin(req *dto.DeviceLoginRequest) (resp *dto.LoginResponse, err error) {
 	if !l.svcCtx.Config.Device.Enable {
 		return nil, xerr.NewErrMsg("Device login is disabled")
+	}
+	if l.svcCtx.Config.Device.OnlyRealDevice {
+		secure, _ := l.ctx.Value(constant.CtxKeyDeviceSecure).(bool)
+		if !secure {
+			return nil, errors.Wrap(xerr.NewErrCode(xerr.InvalidAccess), "verified device transport is required")
+		}
 	}
 
 	loginStatus := false
@@ -50,12 +59,12 @@ func (l *DeviceLoginLogic) DeviceLogin(req *types.DeviceLoginRequest) (resp *typ
 				LoginIP:   req.IP,
 				UserAgent: req.UserAgent,
 				Success:   loginStatus,
-				Timestamp: time.Now().UnixMilli(),
+				Timestamp: timeutil.Now().UnixMilli(),
 			}
 			content, _ := loginLog.Marshal()
 			if err := l.svcCtx.Store.Log().Insert(l.ctx, &log.SystemLog{
 				Type:     log.TypeLogin.Uint8(),
-				Date:     time.Now().Format("2006-01-02"),
+				Date:     timeutil.Now().Format("2006-01-02"),
 				ObjectID: userInfo.Id,
 				Content:  string(content),
 			}); err != nil {
@@ -102,7 +111,7 @@ func (l *DeviceLoginLogic) DeviceLogin(req *types.DeviceLoginRequest) (resp *typ
 	// Generate token
 	token, err := jwt.NewJwtToken(
 		l.svcCtx.Config.JwtAuth.AccessSecret,
-		time.Now().Unix(),
+		timeutil.Now().Unix(),
 		l.svcCtx.Config.JwtAuth.AccessExpire,
 		jwt.WithOption("UserId", userInfo.Id),
 		jwt.WithOption("SessionId", sessionId),
@@ -127,16 +136,38 @@ func (l *DeviceLoginLogic) DeviceLogin(req *types.DeviceLoginRequest) (resp *typ
 	}
 
 	loginStatus = true
-	return &types.LoginResponse{
+	return &dto.LoginResponse{
 		Token: token,
 	}, nil
 }
 
-func (l *DeviceLoginLogic) registerUserAndDevice(req *types.DeviceLoginRequest) (*user.User, error) {
+func (l *DeviceLoginLogic) registerUserAndDevice(req *dto.DeviceLoginRequest) (*user.User, error) {
 	l.Infow("device not found, creating new user and device",
 		logger.Field("identifier", req.Identifier),
 		logger.Field("ip", req.IP),
 	)
+
+	if err := registerpolicy.EnsureRegistrationOpen(l.ctx, l.svcCtx, registerpolicy.MethodDevice); err != nil {
+		return nil, err
+	}
+	if err := registerpolicy.VerifyHuman(l.ctx, l.svcCtx, req.CfToken, req.IP); err != nil {
+		return nil, err
+	}
+	var referer *user.User
+	if req.Invite == "" {
+		if l.svcCtx.Config.Invite.ForcedInvite {
+			return nil, errors.Wrap(xerr.NewErrCode(xerr.InviteCodeError), "invite code is required")
+		}
+	} else {
+		var err error
+		referer, err = l.svcCtx.Store.User().FindOneByReferCode(l.ctx, req.Invite)
+		if err != nil {
+			return nil, errors.Wrap(xerr.NewErrCode(xerr.InviteCodeError), "invite code is invalid")
+		}
+	}
+	if err := registerpolicy.TakeIPPermit(l.ctx, l.svcCtx, req.IP); err != nil {
+		return nil, err
+	}
 
 	var userInfo *user.User
 	var trialSubscribe *user.Subscribe
@@ -144,6 +175,9 @@ func (l *DeviceLoginLogic) registerUserAndDevice(req *types.DeviceLoginRequest) 
 		// Create new user
 		userInfo = &user.User{
 			OnlyFirstPurchase: &l.svcCtx.Config.Invite.OnlyFirstPurchase,
+		}
+		if referer != nil {
+			userInfo.RefererId = referer.Id
 		}
 		if err := store.User().Insert(l.ctx, userInfo); err != nil {
 			l.Errorw("failed to create user",
@@ -229,13 +263,13 @@ func (l *DeviceLoginLogic) registerUserAndDevice(req *types.DeviceLoginRequest) 
 		Identifier: req.Identifier,
 		RegisterIP: req.IP,
 		UserAgent:  req.UserAgent,
-		Timestamp:  time.Now().UnixMilli(),
+		Timestamp:  timeutil.Now().UnixMilli(),
 	}
 	content, _ := registerLog.Marshal()
 
 	if err := l.svcCtx.Store.Log().Insert(l.ctx, &log.SystemLog{
 		Type:     log.TypeRegister.Uint8(),
-		Date:     time.Now().Format("2006-01-02"),
+		Date:     timeutil.Now().Format("2006-01-02"),
 		ObjectID: userInfo.Id,
 		Content:  string(content),
 	}); err != nil {
@@ -260,7 +294,7 @@ func (l *DeviceLoginLogic) activeTrial(store repository.Store, userId int64) (*u
 		return nil, err
 	}
 
-	startTime := time.Now()
+	startTime := timeutil.Now()
 	expireTime := tool.AddTime(l.svcCtx.Config.Register.TrialTimeUnit, l.svcCtx.Config.Register.TrialTime, startTime)
 	subscribeToken := uuidx.SubscribeToken(fmt.Sprintf("Trial-%v-%s", userId, uuidx.NewUUID().String()))
 	subscribeUUID := uuidx.NewUUID().String()
