@@ -8,8 +8,8 @@ import (
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
-	"github.com/perfect-panel/server/internal/logic/notify"
 	"github.com/perfect-panel/server/internal/model/dto"
+	"github.com/perfect-panel/server/internal/module/billing"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/constant"
 	"github.com/perfect-panel/server/pkg/logger"
@@ -17,11 +17,29 @@ import (
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-const maxStripePayloadSize = 65_536
+const (
+	maxStripePayloadSize    = 65_536
+	maxCryptomusPayloadSize = 65_536
+)
 
-var errStripePayloadTooLarge = errors.New("http: request body too large")
+var errNotifyPayloadTooLarge = errors.New("http: request body too large")
 
-// PaymentNotifyHandler Payment Notify
+// PaymentNotifyHandler documents Payment Notify.
+//
+// @Summary Payment Notify
+// @Tags common
+// @Accept json,x-www-form-urlencoded
+// @Produce json
+// @Param platform path string true "platform"
+// @Param token path string true "token"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/notify/{platform}/{token} [delete]
+// @Router /v1/notify/{platform}/{token} [get]
+// @Router /v1/notify/{platform}/{token} [head]
+// @Router /v1/notify/{platform}/{token} [options]
+// @Router /v1/notify/{platform}/{token} [patch]
+// @Router /v1/notify/{platform}/{token} [post]
+// @Router /v1/notify/{platform}/{token} [put]
 func PaymentNotifyHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		platform, ok := c.Value(constant.CtxKeyPlatform).(string)
@@ -32,7 +50,7 @@ func PaymentNotifyHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 		}
 
 		switch payment.ParsePlatform(platform) {
-		case payment.EPay, payment.CryptoSaaS:
+		case payment.EPay:
 			params, err := uniqueFormValues(nativeFormValues(ctx))
 			if err != nil {
 				logger.WithContext(c).Errorw("[PaymentNotifyHandler] ShouldBind failed", logger.Field("error", err.Error()))
@@ -40,11 +58,10 @@ func PaymentNotifyHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 				return
 			}
 			req := epayNotifyRequest(params)
-			l := notify.NewEPayNotifyLogic(c, svcCtx, notify.EPayNotifyMeta{
+			if err := svcCtx.Billing.EPayNotify(c, billing.EPayNotifyMeta{
 				Method: string(ctx.Method()),
 				Params: params,
-			})
-			if err := l.EPayNotify(req); err != nil {
+			}, req); err != nil {
 				logger.WithContext(c).Errorf("EPayNotify failed: %v", err.Error())
 				ctx.String(consts.StatusBadRequest, err.Error())
 				return
@@ -56,24 +73,36 @@ func PaymentNotifyHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 				result.HttpResult(ctx, nil, err)
 				return
 			}
-			l := notify.NewStripeNotifyLogic(c, svcCtx)
-			if err := l.StripeNotify(payload, string(ctx.GetHeader("Stripe-Signature"))); err != nil {
+			if err := svcCtx.Billing.StripeNotify(c, payload, string(ctx.GetHeader("Stripe-Signature"))); err != nil {
 				result.HttpResult(ctx, nil, err)
 				return
 			}
 			result.HttpResult(ctx, nil, nil)
 
 		case payment.AlipayF2F:
-			l := notify.NewAlipayNotifyLogic(c, svcCtx)
-			if err := l.AlipayNotify(nativeFormValues(ctx)); err != nil {
+			if err := svcCtx.Billing.AlipayNotify(c, nativeFormValues(ctx)); err != nil {
 				result.HttpResult(ctx, nil, err)
 				return
 			}
 			// Return success to alipay
 			ctx.String(consts.StatusOK, "success")
 
+		case payment.Cryptomus:
+			payload, err := cryptomusPayload(ctx.Request.Body())
+			if err != nil {
+				result.HttpResult(ctx, nil, err)
+				return
+			}
+			if err := svcCtx.Billing.CryptomusNotify(c, payload); err != nil {
+				logger.WithContext(c).Errorf("CryptomusNotify failed: %v", err.Error())
+				ctx.String(consts.StatusBadRequest, err.Error())
+				return
+			}
+			ctx.String(consts.StatusOK, "success")
+
 		default:
 			logger.WithContext(c).Errorf("platform %s not support", platform)
+			ctx.String(consts.StatusBadRequest, "unsupported payment platform")
 		}
 	}
 }
@@ -91,7 +120,14 @@ func nativeFormValues(ctx *app.RequestContext) url.Values {
 
 func stripePayload(payload []byte) ([]byte, error) {
 	if len(payload) > maxStripePayloadSize {
-		return nil, errStripePayloadTooLarge
+		return nil, errNotifyPayloadTooLarge
+	}
+	return payload, nil
+}
+
+func cryptomusPayload(payload []byte) ([]byte, error) {
+	if len(payload) > maxCryptomusPayloadSize {
+		return nil, errNotifyPayloadTooLarge
 	}
 	return payload, nil
 }

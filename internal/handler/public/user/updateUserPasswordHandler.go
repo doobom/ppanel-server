@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/public/user"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Update User Password
+// UpdateUserPasswordHandler documents Update User Password.
+//
+// @Summary Update User Password
+// @Tags user
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.UpdateUserPasswordRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/public/user/password [put]
 func UpdateUserPasswordHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.UpdateUserPasswordRequest
@@ -25,8 +33,7 @@ func UpdateUserPasswordHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := user.NewUpdateUserPasswordLogic(c, svcCtx)
-		err := l.UpdateUserPassword(&req)
+		err := svcCtx.Identity.UpdateUserPassword(c, &req)
 		result.HttpResult(ctx, nil, err)
 	}
 }

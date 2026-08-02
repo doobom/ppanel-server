@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/public/document"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Get document detail
+// QueryDocumentDetailHandler documents Get document detail.
+//
+// @Summary Get document detail
+// @Tags user
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request query dto.QueryDocumentDetailRequest false "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.Document}
+// @Router /v1/public/document/detail [get]
 func QueryDocumentDetailHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.QueryDocumentDetailRequest
@@ -25,8 +33,7 @@ func QueryDocumentDetailHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := document.NewQueryDocumentDetailLogic(c, svcCtx)
-		resp, err := l.QueryDocumentDetail(&req)
+		resp, err := svcCtx.Support.QueryDocumentDetail(c, &req)
 		result.HttpResult(ctx, resp, err)
 	}
 }

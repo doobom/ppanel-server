@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/public/user"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Update Bind Email
+// UpdateBindEmailHandler documents Update Bind Email.
+//
+// @Summary Update Bind Email
+// @Tags user
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.UpdateBindEmailRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/public/user/bind_email [put]
 func UpdateBindEmailHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.UpdateBindEmailRequest
@@ -25,8 +33,7 @@ func UpdateBindEmailHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := user.NewUpdateBindEmailLogic(c, svcCtx)
-		err := l.UpdateBindEmail(&req)
+		err := svcCtx.Identity.UpdateBindEmail(c, &req)
 		result.HttpResult(ctx, nil, err)
 	}
 }

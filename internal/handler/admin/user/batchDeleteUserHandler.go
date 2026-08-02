@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/user"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Batch delete user
+// BatchDeleteUserHandler documents Batch delete user.
+//
+// @Summary Batch delete user
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.BatchDeleteUserRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/user/batch [delete]
 func BatchDeleteUserHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.BatchDeleteUserRequest
@@ -25,8 +33,7 @@ func BatchDeleteUserHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := user.NewBatchDeleteUserLogic(ctx, svcCtx)
-		err := l.BatchDeleteUser(&req)
+		err := svcCtx.Identity.BatchDeleteUser(ctx, &req)
 		result.HttpResult(c, nil, err)
 	}
 }

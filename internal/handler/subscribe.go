@@ -6,13 +6,25 @@ import (
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
-	"github.com/perfect-panel/server/internal/logic/subscribe"
 	"github.com/perfect-panel/server/internal/model/dto"
+	"github.com/perfect-panel/server/internal/module/subscription"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/logger"
 	"github.com/perfect-panel/server/pkg/tool"
 )
 
+// SubscribeHandler returns a client subscription configuration.
+//
+// @Summary Get subscription configuration
+// @Tags user
+// @Produce plain
+// @Param token query string false "Subscription token; alternatively send the token header"
+// @Param token header string false "Subscription token"
+// @Param flag query string false "Subscription format flag"
+// @Param type query string false "Subscription format type"
+// @Param User-Agent header string false "Client user agent"
+// @Success 200 {string} string
+// @Router /v1/subscribe/config [get]
 func SubscribeHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		req := dto.SubscribeRequest{
@@ -45,7 +57,7 @@ func SubscribeHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			}
 		}
 
-		if svcCtx.Config.Subscribe.UserAgentLimit && !subscribe.IsUserAgentAllowed(c, svcCtx, req.UA) {
+		if svcCtx.Config.Subscribe.UserAgentLimit && !svcCtx.Subscription.IsUserAgentAllowed(c, req.UA) {
 			ctx.String(consts.StatusForbidden, "Access denied")
 			return
 		}
@@ -53,10 +65,18 @@ func SubscribeHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	}
 }
 
+// PanDomainSubscribeHandler returns a subscription selected by the request host.
+//
+// @Summary Get pan-domain subscription configuration
+// @Tags user
+// @Produce plain
+// @Param User-Agent header string false "Client user agent"
+// @Success 200 {string} string
+// @Router / [get]
 func PanDomainSubscribeHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		ua := string(ctx.UserAgent())
-		if svcCtx.Config.Subscribe.UserAgentLimit && !subscribe.IsUserAgentAllowed(c, svcCtx, ua) {
+		if svcCtx.Config.Subscribe.UserAgentLimit && !svcCtx.Subscription.IsUserAgentAllowed(c, ua) {
 			ctx.String(consts.StatusForbidden, "Access denied")
 			return
 		}
@@ -77,13 +97,12 @@ func PanDomainSubscribeHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 }
 
 func writeSubscribeResponse(c context.Context, ctx *app.RequestContext, svcCtx *svc.ServiceContext, req dto.SubscribeRequest) {
-	l := subscribe.NewSubscribeLogic(c, svcCtx, subscribe.RequestMeta{
+	resp, err := svcCtx.Subscription.Deliver(c, subscription.RequestMeta{
 		Host:       string(ctx.Host()),
 		RequestURI: string(ctx.URI().RequestURI()),
 		UserAgent:  string(ctx.UserAgent()),
 		ClientIP:   ctx.ClientIP(),
-	})
-	resp, err := l.Handler(&req)
+	}, &req)
 	if err != nil {
 		ctx.String(consts.StatusInternalServerError, "Internal Server")
 		return

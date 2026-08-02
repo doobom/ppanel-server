@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/subscribe"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Get subscribe list
+// GetSubscribeListHandler documents Get subscribe list.
+//
+// @Summary Get subscribe list
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request query dto.GetSubscribeListRequest false "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.GetSubscribeListResponse}
+// @Router /v1/admin/subscribe/list [get]
 func GetSubscribeListHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.GetSubscribeListRequest
@@ -25,8 +33,7 @@ func GetSubscribeListHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := subscribe.NewGetSubscribeListLogic(c, svcCtx)
-		resp, err := l.GetSubscribeList(&req)
+		resp, err := svcCtx.Subscription.GetSubscribeList(c, &req)
 		result.HttpResult(ctx, resp, err)
 	}
 }

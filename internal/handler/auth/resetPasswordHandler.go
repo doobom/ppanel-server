@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/auth"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
@@ -15,7 +14,15 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Reset password
+// ResetPasswordHandler documents Reset password.
+//
+// @Summary Reset password
+// @Tags common
+// @Accept json
+// @Produce json
+// @Param request body dto.ResetPasswordRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.LoginResponse}
+// @Router /v1/auth/reset [post]
 func ResetPasswordHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.ResetPasswordRequest
@@ -41,8 +48,7 @@ func ResetPasswordHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 				return
 			}
 		}
-		l := auth.NewResetPasswordLogic(ctx, svcCtx)
-		resp, err := l.ResetPassword(&req)
+		resp, err := svcCtx.Identity.ResetPassword(ctx, &req)
 		result.HttpResult(c, resp, err)
 	}
 }

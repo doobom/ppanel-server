@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/public/ticket"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Create ticket
+// CreateUserTicketHandler documents Create ticket.
+//
+// @Summary Create ticket
+// @Tags user
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.CreateUserTicketRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/public/ticket/ [post]
 func CreateUserTicketHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.CreateUserTicketRequest
@@ -25,8 +33,7 @@ func CreateUserTicketHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := ticket.NewCreateUserTicketLogic(c, svcCtx)
-		err := l.CreateUserTicket(&req)
+		err := svcCtx.Support.CreateUserTicket(c, &req)
 		result.HttpResult(ctx, nil, err)
 	}
 }

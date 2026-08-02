@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/perfect-panel/server/internal/model/entity/user"
+	"github.com/perfect-panel/server/internal/module/identity/entity/user"
 	"github.com/perfect-panel/server/internal/repository"
 
 	"github.com/perfect-panel/server/initialize/migrate"
@@ -41,6 +41,7 @@ func Migrate(ctx *svc.ServiceContext) {
 			enable := true
 			admin := &user.User{
 				Password:  tool.EncodePassWord(ctx.Config.Administrator.Password),
+				Algo:      tool.PasswordAlgoArgon2id,
 				IsAdmin:   &enable,
 				ReferCode: uuidx.UserInviteCode(time.Now().Unix()),
 			}
@@ -48,7 +49,7 @@ func Migrate(ctx *svc.ServiceContext) {
 				logger.Errorf("[Migrate] CreateAdminUser error: %v", err.Error())
 				return err
 			}
-			if err := store.User().InsertUserAuthMethods(context.Background(), &user.AuthMethods{
+			if err := store.UserAuth().InsertUserAuthMethods(context.Background(), &user.AuthMethods{
 				UserId:         admin.Id,
 				AuthType:       "email",
 				AuthIdentifier: ctx.Config.Administrator.Email,

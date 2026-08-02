@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/public/user"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Unbind Device
+// UnbindDeviceHandler documents Unbind Device.
+//
+// @Summary Unbind Device
+// @Tags user
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.UnbindDeviceRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/public/user/unbind_device [put]
 func UnbindDeviceHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.UnbindDeviceRequest
@@ -25,8 +33,7 @@ func UnbindDeviceHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := user.NewUnbindDeviceLogic(c, svcCtx)
-		err := l.UnbindDevice(&req)
+		err := svcCtx.Identity.UnbindDevice(c, &req)
 		result.HttpResult(ctx, nil, err)
 	}
 }

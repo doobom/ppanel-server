@@ -1,6 +1,6 @@
 package payment
 
-import "github.com/perfect-panel/server/internal/model/dto"
+import "github.com/perfect-panel/server/pkg/platform"
 
 type Platform int
 
@@ -9,16 +9,16 @@ const (
 	AlipayF2F
 	EPay
 	Balance
-	CryptoSaaS
+	Cryptomus
 	UNSUPPORTED Platform = -1
 )
 
 var platformNames = map[string]Platform{
-	"CryptoSaaS":  CryptoSaaS,
 	"Stripe":      Stripe,
 	"AlipayF2F":   AlipayF2F,
 	"EPay":        EPay,
 	"balance":     Balance,
+	"Cryptomus":   Cryptomus,
 	"unsupported": UNSUPPORTED,
 }
 
@@ -38,11 +38,19 @@ func ParsePlatform(s string) Platform {
 	return UNSUPPORTED
 }
 
-func GetSupportedPlatforms() []dto.PlatformInfo {
-	return []dto.PlatformInfo{
+// SupportedPlatformNames lists every platform that may be exposed for a new
+// checkout. Keep this separate from GetSupportedPlatforms because balance is
+// an internal checkout method rather than an administrator-configurable
+// gateway.
+func SupportedPlatformNames() []string {
+	return []string{Stripe.String(), AlipayF2F.String(), EPay.String(), Balance.String(), Cryptomus.String()}
+}
+
+func GetSupportedPlatforms() []platform.Info {
+	return []platform.Info{
 		{
 			Platform:    Stripe.String(),
-			PlatformUrl: "https://stripe.com",
+			PlatformURL: "https://stripe.com",
 			PlatformFieldDescription: map[string]string{
 				"public_key":     "Publishable key",
 				"secret_key":     "Secret key",
@@ -52,7 +60,7 @@ func GetSupportedPlatforms() []dto.PlatformInfo {
 		},
 		{
 			Platform:    AlipayF2F.String(),
-			PlatformUrl: "https://alipay.com",
+			PlatformURL: "https://alipay.com",
 			PlatformFieldDescription: map[string]string{
 				"app_id":       "App ID",
 				"private_key":  "Private Key",
@@ -63,7 +71,7 @@ func GetSupportedPlatforms() []dto.PlatformInfo {
 		},
 		{
 			Platform:    EPay.String(),
-			PlatformUrl: "",
+			PlatformURL: "",
 			PlatformFieldDescription: map[string]string{
 				"pid":  "PID",
 				"url":  "URL",
@@ -72,12 +80,11 @@ func GetSupportedPlatforms() []dto.PlatformInfo {
 			},
 		},
 		{
-			Platform:    CryptoSaaS.String(),
-			PlatformUrl: "https://t.me/CryptoSaaSBot",
+			Platform:    Cryptomus.String(),
+			PlatformURL: "https://cryptomus.com",
 			PlatformFieldDescription: map[string]string{
-				"endpoint":   "API Endpoint",
-				"account_id": "Account ID",
-				"secret_key": "Secret Key",
+				"merchant_id": "Merchant UUID",
+				"api_key":     "Payment API Key",
 			},
 		},
 	}

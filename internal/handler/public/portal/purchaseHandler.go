@@ -4,14 +4,21 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/public/portal"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Purchase subscription
+// PurchaseHandler documents Purchase subscription.
+//
+// @Summary Purchase subscription
+// @Tags user
+// @Accept json
+// @Produce json
+// @Param request body dto.PortalPurchaseRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.PortalPurchaseResponse}
+// @Router /v1/public/portal/purchase [post]
 func PurchaseHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.PortalPurchaseRequest
@@ -25,8 +32,7 @@ func PurchaseHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := portal.NewPurchaseLogic(c, svcCtx)
-		resp, err := l.Purchase(&req)
+		resp, err := svcCtx.Billing.PortalPurchase(c, &req)
 		result.HttpResult(ctx, resp, err)
 	}
 }

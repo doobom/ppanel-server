@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/log"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Filter balance log
+// FilterBalanceLogHandler documents Filter balance log.
+//
+// @Summary Filter balance log
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request query dto.FilterBalanceLogRequest false "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.FilterBalanceLogResponse}
+// @Router /v1/admin/log/balance/list [get]
 func FilterBalanceLogHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.FilterBalanceLogRequest
@@ -25,8 +33,7 @@ func FilterBalanceLogHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := log.NewFilterBalanceLogLogic(ctx, svcCtx)
-		resp, err := l.FilterBalanceLog(&req)
+		resp, err := svcCtx.Platform.FilterBalanceLog(ctx, &req)
 		result.HttpResult(c, resp, err)
 	}
 }

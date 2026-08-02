@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/payment"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Create Payment Method
+// CreatePaymentMethodHandler documents Create Payment Method.
+//
+// @Summary Create Payment Method
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.CreatePaymentMethodRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.PaymentConfig}
+// @Router /v1/admin/payment/ [post]
 func CreatePaymentMethodHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.CreatePaymentMethodRequest
@@ -25,8 +33,7 @@ func CreatePaymentMethodHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := payment.NewCreatePaymentMethodLogic(c, svcCtx)
-		resp, err := l.CreatePaymentMethod(&req)
+		resp, err := svcCtx.Billing.CreatePaymentMethod(c, &req)
 		result.HttpResult(ctx, resp, err)
 	}
 }

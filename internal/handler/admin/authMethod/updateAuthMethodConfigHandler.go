@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/authMethod"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Update auth method config
+// UpdateAuthMethodConfigHandler documents Update auth method config.
+//
+// @Summary Update auth method config
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.UpdateAuthMethodConfigRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.AuthMethodConfig}
+// @Router /v1/admin/auth-method/config [put]
 func UpdateAuthMethodConfigHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.UpdateAuthMethodConfigRequest
@@ -25,8 +33,7 @@ func UpdateAuthMethodConfigHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := authMethod.NewUpdateAuthMethodConfigLogic(ctx, svcCtx)
-		resp, err := l.UpdateAuthMethodConfig(&req)
+		resp, err := svcCtx.Identity.UpdateAuthMethodConfig(ctx, &req)
 		result.HttpResult(c, resp, err)
 	}
 }

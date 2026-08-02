@@ -4,39 +4,58 @@ import (
 	"context"
 
 	"github.com/perfect-panel/server/pkg/device"
+	"github.com/perfect-panel/server/pkg/exchangeRate"
 
 	"github.com/perfect-panel/server/internal/config"
+	"github.com/perfect-panel/server/internal/eventbus"
+	"github.com/perfect-panel/server/internal/module/billing"
+	"github.com/perfect-panel/server/internal/module/identity"
+	"github.com/perfect-panel/server/internal/module/network"
+	"github.com/perfect-panel/server/internal/module/notification"
+	"github.com/perfect-panel/server/internal/module/platform"
+	"github.com/perfect-panel/server/internal/module/subscription"
+	"github.com/perfect-panel/server/internal/module/support"
 	"github.com/perfect-panel/server/internal/repository"
+	"github.com/perfect-panel/server/pkg/asynqx"
 	"github.com/perfect-panel/server/pkg/limit"
 	"github.com/perfect-panel/server/pkg/nodeMultiplier"
 	"github.com/perfect-panel/server/pkg/orm"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	tgbot "github.com/go-telegram/bot"
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 )
 
-// PluginReadySignaler 用于等待插件管理器就绪
-type PluginReadySignaler interface {
-	WaitReady(ctx context.Context) error
-}
-
 type ServiceContext struct {
 	Redis        *redis.Client
 	Config       config.Config
-	Queue        *asynq.Client
-	ExchangeRate float64
+	Queue        *asynqx.Client
+	Inspector    *asynq.Inspector
+	ExchangeRate *exchangeRate.Cache
 	GeoIP        *IPLocation
 	Store        repository.Store
 
+	// Domain modules (see docs/adr-001-modular-monolith.md). ServiceContext is
+	// their composition root; handlers call the module facades.
+	Support      support.Service
+	Billing      billing.Service
+	Platform     platform.Service
+	Subscription subscription.Service
+	Identity     identity.Service
+	Network      network.Service
+	Notification notification.Service
+	EventBus     *eventbus.Bus
+
 	//NodeCache   *cache.NodeCacheClient
-	Restart               func() error
-	TelegramBot           *tgbotapi.BotAPI
+	Restart func() error
+	// ReinitSubsystem re-runs a subsystem's initialization after its
+	// configuration changed; assigned by the transport server alongside
+	// Restart (the initialize package cannot be imported here).
+	ReinitSubsystem       func(subsystem string)
+	TelegramBot           *tgbot.Bot
 	NodeMultiplierManager *nodeMultiplier.Manager
 	AuthLimiter           *limit.PeriodLimit
 	DeviceManager         *device.DeviceManager
-	PluginReady           PluginReadySignaler
-	PluginMgr             any // *plugin.Manager, avoids import cycle
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
@@ -65,18 +84,31 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		panic(err.Error())
 	}
 	authLimiter := limit.NewPeriodLimit(86400, 15, rds, config.SendCountLimitKeyPrefix, limit.Align())
-	store := repository.NewGormStore(db, rds)
+	store := NewStore(db, rds)
+	queue := NewAsynqClient(c)
+	rate := exchangeRate.NewCache(0)
 	srv := &ServiceContext{
 		Redis:        rds,
 		Config:       c,
-		Queue:        NewAsynqClient(c),
-		ExchangeRate: 0,
+		Queue:        queue,
+		Inspector:    NewAsynqInspector(c),
+		ExchangeRate: rate,
 		GeoIP:        geoIP,
 		Store:        store,
 		//NodeCache:   cache.NewNodeCacheClient(rds),
 		AuthLimiter: authLimiter,
 	}
+	// Support takes srv for the ticket→Telegram mirror; the adapter reads
+	// srv.Notification lazily, so constructing it before Notification is safe.
+	srv.Support = newSupportModule(store, queue, srv)
+	srv.Billing = newBillingModule(c, store, queue, rds, rate, srv)
+	srv.Platform = newPlatformModule(store, srv)
 	srv.DeviceManager = NewDeviceManager(srv)
+	srv.Subscription = newSubscriptionModule(store, srv)
+	srv.Identity = newIdentityModule(store, srv)
+	srv.Network = newNetworkModule(store, srv)
+	srv.Notification = newNotificationModule(store, srv)
+	srv.EventBus = newEventBus(store, srv)
 	return srv
 
 }

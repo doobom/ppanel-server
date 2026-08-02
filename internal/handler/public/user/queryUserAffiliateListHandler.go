@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/public/user"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Query User Affiliate List
+// QueryUserAffiliateListHandler documents Query User Affiliate List.
+//
+// @Summary Query User Affiliate List
+// @Tags user
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request query dto.QueryUserAffiliateListRequest false "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.QueryUserAffiliateListResponse}
+// @Router /v1/public/user/affiliate/list [get]
 func QueryUserAffiliateListHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.QueryUserAffiliateListRequest
@@ -25,8 +33,7 @@ func QueryUserAffiliateListHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := user.NewQueryUserAffiliateListLogic(c, svcCtx)
-		resp, err := l.QueryUserAffiliateList(&req)
+		resp, err := svcCtx.Billing.QueryUserAffiliateList(c, &req)
 		result.HttpResult(ctx, resp, err)
 	}
 }

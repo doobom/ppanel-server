@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/coupon"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Get coupon list
+// GetCouponListHandler documents Get coupon list.
+//
+// @Summary Get coupon list
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request query dto.GetCouponListRequest false "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.GetCouponListResponse}
+// @Router /v1/admin/coupon/list [get]
 func GetCouponListHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.GetCouponListRequest
@@ -25,8 +33,7 @@ func GetCouponListHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := coupon.NewGetCouponListLogic(ctx, svcCtx)
-		resp, err := l.GetCouponList(&req)
+		resp, err := svcCtx.Billing.GetCouponList(ctx, &req)
 		result.HttpResult(c, resp, err)
 	}
 }

@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/application"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Update subscribe application
+// UpdateSubscribeApplicationHandler documents Update subscribe application.
+//
+// @Summary Update subscribe application
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.UpdateSubscribeApplicationRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.SubscribeApplication}
+// @Router /v1/admin/application/subscribe_application [put]
 func UpdateSubscribeApplicationHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.UpdateSubscribeApplicationRequest
@@ -25,8 +33,7 @@ func UpdateSubscribeApplicationHandler(svcCtx *svc.ServiceContext) app.HandlerFu
 			return
 		}
 
-		l := application.NewUpdateSubscribeApplicationLogic(ctx, svcCtx)
-		resp, err := l.UpdateSubscribeApplication(&req)
+		resp, err := svcCtx.Subscription.UpdateSubscribeApplication(ctx, &req)
 		result.HttpResult(c, resp, err)
 	}
 }

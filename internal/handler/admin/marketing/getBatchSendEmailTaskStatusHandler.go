@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/marketing"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Get batch send email task status
+// GetBatchSendEmailTaskStatusHandler documents Get batch send email task status.
+//
+// @Summary Get batch send email task status
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.GetBatchSendEmailTaskStatusRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.GetBatchSendEmailTaskStatusResponse}
+// @Router /v1/admin/marketing/email/batch/status [post]
 func GetBatchSendEmailTaskStatusHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.GetBatchSendEmailTaskStatusRequest
@@ -25,8 +33,7 @@ func GetBatchSendEmailTaskStatusHandler(svcCtx *svc.ServiceContext) app.HandlerF
 			return
 		}
 
-		l := marketing.NewGetBatchSendEmailTaskStatusLogic(c, svcCtx)
-		resp, err := l.GetBatchSendEmailTaskStatus(&req)
+		resp, err := svcCtx.Support.GetBatchSendEmailTaskStatus(c, &req)
 		result.HttpResult(ctx, resp, err)
 	}
 }

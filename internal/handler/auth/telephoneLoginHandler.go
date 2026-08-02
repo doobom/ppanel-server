@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/auth"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
@@ -15,7 +14,15 @@ import (
 	"github.com/pkg/errors"
 )
 
-// User Telephone login
+// TelephoneLoginHandler documents User Telephone login.
+//
+// @Summary User Telephone login
+// @Tags common
+// @Accept json
+// @Produce json
+// @Param request body dto.TelephoneLoginRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.LoginResponse}
+// @Router /v1/auth/login/telephone [post]
 func TelephoneLoginHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.TelephoneLoginRequest
@@ -41,8 +48,7 @@ func TelephoneLoginHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 				return
 			}
 		}
-		l := auth.NewTelephoneLoginLogic(c, svcCtx)
-		resp, err := l.TelephoneLogin(&req, ctx.ClientIP(), string(ctx.UserAgent()))
+		resp, err := svcCtx.Identity.TelephoneLogin(c, &req, ctx.ClientIP(), string(ctx.UserAgent()))
 		result.HttpResult(ctx, resp, err)
 	}
 }

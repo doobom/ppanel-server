@@ -2,8 +2,11 @@ package epay
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -65,6 +68,31 @@ func TestParseMoneyUsesExactMinorUnits(t *testing.T) {
 	}
 }
 
+func TestCreatePayUrlBuildsSignedSubmitRedirect(t *testing.T) {
+	client := NewClient("1001", "https://pay.example/", "secret", "alipay")
+	payURL, err := client.CreatePayUrl(Order{
+		Name: "product", OrderNo: "order-1", Amount: 10,
+		NotifyUrl: "https://merchant.example/notify", ReturnUrl: "https://merchant.example/return",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayUrl: %v", err)
+	}
+	if !strings.HasPrefix(payURL, "https://pay.example/submit.php?") {
+		t.Fatalf("unexpected submit redirect: %s", payURL)
+	}
+	parsed, err := url.Parse(payURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	params := make(map[string]string, len(parsed.Query()))
+	for name := range parsed.Query() {
+		params[name] = parsed.Query().Get(name)
+	}
+	if params["sign_type"] != "MD5" || !client.VerifySign(params) {
+		t.Fatalf("submit redirect has invalid signature: %+v", params)
+	}
+}
+
 func TestQueryOrderReturnsAuthoritativeGatewayFields(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Path; got != "/gateway/api.php" {
@@ -94,6 +122,76 @@ func TestQueryOrderReturnsAuthoritativeGatewayFields(t *testing.T) {
 	}
 }
 
+func TestQueryOrderFallsBackToEasyPayStatusQuery(t *testing.T) {
+	var standardRequests, fallbackRequests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/gateway/api.php":
+			standardRequests++
+			if r.Method != http.MethodGet {
+				t.Errorf("standard method=%s, want GET", r.Method)
+			}
+			http.NotFound(w, r)
+		case "/gateway/api/EasyPay/queryOrder":
+			fallbackRequests++
+			if r.Method != http.MethodPost {
+				t.Errorf("fallback method=%s, want POST", r.Method)
+			}
+			if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+				t.Errorf("fallback content-type=%q", r.Header.Get("Content-Type"))
+			}
+			if err := r.ParseForm(); err != nil {
+				t.Fatal(err)
+			}
+			if got := r.PostForm.Get("orderNo"); got != "order-1" {
+				t.Errorf("orderNo=%q, want order-1", got)
+			}
+			if len(r.PostForm) != 1 {
+				t.Errorf("fallback params=%v, want only orderNo", r.PostForm)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"code": 1, "msg": "query success", "data": map[string]string{"status": "success"},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient("1001", server.URL+"/gateway", "secret", "alipay")
+	result, err := client.QueryOrder("order-1")
+	if err != nil {
+		t.Fatalf("QueryOrder: %v", err)
+	}
+	if standardRequests != 1 || fallbackRequests != 1 {
+		t.Fatalf("standard=%d fallback=%d, want one request each", standardRequests, fallbackRequests)
+	}
+	if !result.Paid || !result.StatusOnly || result.Message != "query success" {
+		t.Fatalf("unexpected fallback result: %+v", result)
+	}
+}
+
+func TestQueryOrderEasyPayFallbackReportsUnpaid(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api.php" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"code": 1, "data": map[string]string{"status": "pending"},
+		})
+	}))
+	defer server.Close()
+
+	result, err := NewClient("1001", server.URL, "secret", "alipay").QueryOrder("order-1")
+	if err != nil {
+		t.Fatalf("QueryOrder: %v", err)
+	}
+	if result.Paid || !result.StatusOnly {
+		t.Fatalf("unexpected fallback result: %+v", result)
+	}
+}
+
 func TestQueryOrderRejectsUnsuccessfulLookup(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"code":-1,"msg":"not found"}`))
@@ -103,5 +201,46 @@ func TestQueryOrderRejectsUnsuccessfulLookup(t *testing.T) {
 	client := NewClient("1001", server.URL, "secret", "alipay")
 	if _, err := client.QueryOrder("order-1"); err == nil {
 		t.Fatal("unsuccessful gateway lookup must be rejected")
+	}
+}
+
+func TestQueryOrderReportsUnsupportedWhenGatewayReturnsNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	client := NewClient("1001", server.URL, "secret", "alipay")
+	if _, err := client.QueryOrder("order-1"); !errors.Is(err, ErrQueryNotSupported) {
+		t.Fatalf("QueryOrder error=%v, want ErrQueryNotSupported", err)
+	}
+}
+
+// A gateway that answers the query path with an HTML error page does not
+// implement the query protocol; that must classify as unsupported so
+// signature-verified callbacks and close attempts are not blocked by it.
+func TestQueryOrderTreatsNonJSONResponseAsUnsupported(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte("<html><body>502 Bad Gateway</body></html>"))
+	}))
+	defer server.Close()
+
+	client := NewClient("1001", server.URL+"/gateway", "secret", "alipay")
+	_, err := client.QueryOrder("order-1")
+	if !errors.Is(err, ErrQueryNotSupported) {
+		t.Fatalf("QueryOrder error = %v, want ErrQueryNotSupported", err)
+	}
+}
+
+func TestQueryOrderDoesNotTreatOtherHTTPFailuresAsUnsupported(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "gateway failure", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := NewClient("1001", server.URL, "secret", "alipay")
+	if _, err := client.QueryOrder("order-1"); errors.Is(err, ErrQueryNotSupported) {
+		t.Fatal("only a 404 response may be treated as an unsupported query API")
 	}
 }

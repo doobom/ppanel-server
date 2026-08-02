@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/system"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Set Node Multiplier
+// SetNodeMultiplierHandler documents Set Node Multiplier.
+//
+// @Summary Set Node Multiplier
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.SetNodeMultiplierRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/system/set_node_multiplier [post]
 func SetNodeMultiplierHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.SetNodeMultiplierRequest
@@ -25,8 +33,7 @@ func SetNodeMultiplierHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := system.NewSetNodeMultiplierLogic(ctx, svcCtx)
-		err := l.SetNodeMultiplier(&req)
+		err := svcCtx.Platform.SetNodeMultiplier(ctx, &req)
 		result.HttpResult(c, nil, err)
 	}
 }

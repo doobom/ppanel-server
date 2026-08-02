@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/document"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Get document list
+// GetDocumentListHandler documents Get document list.
+//
+// @Summary Get document list
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request query dto.GetDocumentListRequest false "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.GetDocumentListResponse}
+// @Router /v1/admin/document/list [get]
 func GetDocumentListHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.GetDocumentListRequest
@@ -25,8 +33,7 @@ func GetDocumentListHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := document.NewGetDocumentListLogic(ctx, svcCtx)
-		resp, err := l.GetDocumentList(&req)
+		resp, err := svcCtx.Support.GetDocumentList(ctx, &req)
 		result.HttpResult(c, resp, err)
 	}
 }

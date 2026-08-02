@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/server"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Create Node
+// CreateNodeHandler documents Create Node.
+//
+// @Summary Create Node
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.CreateNodeRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/server/node/create [post]
 func CreateNodeHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.CreateNodeRequest
@@ -25,8 +33,7 @@ func CreateNodeHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := server.NewCreateNodeLogic(c, svcCtx)
-		err := l.CreateNode(&req)
+		err := svcCtx.Network.CreateNode(c, &req)
 		result.HttpResult(ctx, nil, err)
 	}
 }

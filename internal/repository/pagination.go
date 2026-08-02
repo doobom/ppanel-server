@@ -1,29 +1,31 @@
 package repository
 
 const (
-	defaultPageSize = 20
-	maxPageSize     = 100
+	DefaultPageSize = 20
+	MaxPageSize     = 100
 )
 
-func normalizePage(page, size int) (int, int) {
+// NormalizePage clamps pagination inputs; module repo implementations share it.
+func NormalizePage(page, size int) (int, int) {
 	if page < 1 {
 		page = 1
 	}
 	if size < 1 {
-		size = defaultPageSize
+		size = DefaultPageSize
 	}
-	if size > maxPageSize {
-		size = maxPageSize
+	if size > MaxPageSize {
+		size = MaxPageSize
 	}
 	return page, size
 }
 
-func normalizePageFloor(page, size int) (int, int) {
+// NormalizePageFloor clamps pagination inputs without a minimum page size.
+func NormalizePageFloor(page, size int) (int, int) {
 	if page < 1 {
 		page = 1
 	}
 	if size < 1 {
-		size = defaultPageSize
+		size = DefaultPageSize
 	}
 	return page, size
 }

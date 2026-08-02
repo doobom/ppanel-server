@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/payment"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Delete Payment Method
+// DeletePaymentMethodHandler documents Delete Payment Method.
+//
+// @Summary Delete Payment Method
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.DeletePaymentMethodRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/payment/ [delete]
 func DeletePaymentMethodHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.DeletePaymentMethodRequest
@@ -25,8 +33,7 @@ func DeletePaymentMethodHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := payment.NewDeletePaymentMethodLogic(c, svcCtx)
-		err := l.DeletePaymentMethod(&req)
+		err := svcCtx.Billing.DeletePaymentMethod(c, &req)
 		result.HttpResult(ctx, nil, err)
 	}
 }

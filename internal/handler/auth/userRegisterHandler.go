@@ -4,14 +4,21 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/auth"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// User register
+// UserRegisterHandler documents registers a user..
+//
+// @Summary registers a user.
+// @Tags common
+// @Accept json
+// @Produce json
+// @Param request body dto.UserRegisterRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.LoginResponse}
+// @Router /v1/auth/register [post]
 func UserRegisterHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.UserRegisterRequest
@@ -28,8 +35,7 @@ func UserRegisterHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := auth.NewUserRegisterLogic(ctx, svcCtx)
-		resp, err := l.UserRegister(&req)
+		resp, err := svcCtx.Identity.UserRegister(ctx, &req)
 		result.HttpResult(c, resp, err)
 	}
 }

@@ -4,13 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/server"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
+// UpdateServerNodeConfigHandler documents Update Server Node Config.
+//
+// @Summary Update Server Node Config
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.UpdateServerNodeConfigRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/server/node_config/update [post]
 func UpdateServerNodeConfigHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.UpdateServerNodeConfigRequest
@@ -24,8 +33,7 @@ func UpdateServerNodeConfigHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := server.NewUpdateServerNodeConfigLogic(c, svcCtx)
-		err := l.UpdateServerNodeConfig(&req)
+		err := svcCtx.Network.UpdateServerNodeConfig(c, &req)
 		result.HttpResult(ctx, nil, err)
 	}
 }

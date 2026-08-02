@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/announcement"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Update announcement
+// UpdateAnnouncementHandler documents Update announcement.
+//
+// @Summary Update announcement
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.UpdateAnnouncementRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/announcement/ [put]
 func UpdateAnnouncementHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.UpdateAnnouncementRequest
@@ -25,8 +33,7 @@ func UpdateAnnouncementHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := announcement.NewUpdateAnnouncementLogic(ctx, svcCtx)
-		err := l.UpdateAnnouncement(&req)
+		err := svcCtx.Support.UpdateAnnouncement(ctx, &req)
 		result.HttpResult(c, nil, err)
 	}
 }

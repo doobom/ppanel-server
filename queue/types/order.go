@@ -6,9 +6,15 @@ import (
 )
 
 const (
-	DeferCloseOrder              = "defer:order:close"
-	ForthwithActivateOrder       = "forthwith:order:activate"
-	SchedulerReconcilePaidOrders = "scheduler:order:reconcile-paid"
+	DeferCloseOrder                 = "defer:order:close"
+	ForthwithActivateOrder          = "forthwith:order:activate"
+	SchedulerReconcilePaidOrders    = "scheduler:order:reconcile-paid"
+	SchedulerReconcilePendingOrders = "scheduler:order:reconcile-pending"
+	SchedulerPublishOrderEvents     = "scheduler:order:publish-events"
+	SchedulerCleanupOrderEvents     = "scheduler:order:cleanup-events"
+	// SchedulerDailyOrderReport pushes the previous day's settlement summary
+	// to the administrators bound on Telegram.
+	SchedulerDailyOrderReport = "scheduler:order:daily-report"
 )
 
 type (

@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/user"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Stop user subscribe
+// ToggleUserSubscribeStatusHandler documents Stop user subscribe.
+//
+// @Summary Stop user subscribe
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.ToggleUserSubscribeStatusRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/user/subscribe/toggle [post]
 func ToggleUserSubscribeStatusHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.ToggleUserSubscribeStatusRequest
@@ -25,8 +33,7 @@ func ToggleUserSubscribeStatusHandler(svcCtx *svc.ServiceContext) app.HandlerFun
 			return
 		}
 
-		l := user.NewToggleUserSubscribeStatusLogic(ctx, svcCtx)
-		err := l.ToggleUserSubscribeStatus(&req)
+		err := svcCtx.Subscription.ToggleUserSubscribeStatus(ctx, &req)
 		result.HttpResult(c, nil, err)
 	}
 }

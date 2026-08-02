@@ -68,7 +68,7 @@ type DeviceAuthticateConfig struct {
 type DeviceLoginRequest struct {
 	Identifier string `json:"identifier" validate:"required"`
 	Invite     string `json:"invite,optional"`
-	IP         string `header:"X-Original-Forwarded-For"`
+	IP         string `header:"X-Original-Forwarded-For" swaggerignore:"true"`
 	UserAgent  string `json:"user_agent" validate:"required"`
 	CfToken    string `json:"cf_token,optional"`
 }
@@ -136,11 +136,11 @@ type PubilcVerifyCodeConfig struct {
 type ResetPasswordRequest struct {
 	Identifier string `json:"identifier"`
 	Email      string `json:"email" validate:"required,email"`
-	Password   string `json:"password" validate:"required"`
+	Password   string `json:"password" validate:"required,min=8,max=128"`
 	Code       string `json:"code,optional"`
-	IP         string `header:"X-Original-Forwarded-For"`
-	UserAgent  string `header:"User-Agent"`
-	LoginType  string `header:"Login-Type"`
+	IP         string `header:"X-Original-Forwarded-For" swaggerignore:"true"`
+	UserAgent  string `header:"User-Agent" swaggerignore:"true"`
+	LoginType  string `header:"Login-Type" swaggerignore:"true"`
 	CfToken    string `json:"cf_token,optional"`
 }
 
@@ -182,9 +182,9 @@ type TelephoneLoginRequest struct {
 	TelephoneCode     string `json:"telephone_code"`
 	TelephoneAreaCode string `json:"telephone_area_code" validate:"required"`
 	Password          string `json:"password"`
-	IP                string `header:"X-Original-Forwarded-For"`
-	UserAgent         string `header:"User-Agent"`
-	LoginType         string `header:"Login-Type"`
+	IP                string `header:"X-Original-Forwarded-For" swaggerignore:"true"`
+	UserAgent         string `header:"User-Agent" swaggerignore:"true"`
+	LoginType         string `header:"Login-Type" swaggerignore:"true"`
 	CfToken           string `json:"cf_token,optional"`
 }
 
@@ -192,12 +192,12 @@ type TelephoneRegisterRequest struct {
 	Identifier        string `json:"identifier"`
 	Telephone         string `json:"telephone" validate:"required"`
 	TelephoneAreaCode string `json:"telephone_area_code" validate:"required"`
-	Password          string `json:"password" validate:"required"`
+	Password          string `json:"password" validate:"required,min=8,max=128"`
 	Invite            string `json:"invite,optional"`
 	Code              string `json:"code,optional"`
-	IP                string `header:"X-Original-Forwarded-For"`
-	UserAgent         string `header:"User-Agent"`
-	LoginType         string `header:"Login-Type,optional"`
+	IP                string `header:"X-Original-Forwarded-For" swaggerignore:"true"`
+	UserAgent         string `header:"User-Agent" swaggerignore:"true"`
+	LoginType         string `header:"Login-Type,optional" swaggerignore:"true"`
 	CfToken           string `json:"cf_token,optional"`
 }
 
@@ -205,11 +205,11 @@ type TelephoneResetPasswordRequest struct {
 	Identifier        string `json:"identifier"`
 	Telephone         string `json:"telephone" validate:"required"`
 	TelephoneAreaCode string `json:"telephone_area_code" validate:"required"`
-	Password          string `json:"password" validate:"required"`
+	Password          string `json:"password" validate:"required,min=8,max=128"`
 	Code              string `json:"code,optional"`
-	IP                string `header:"X-Original-Forwarded-For"`
-	UserAgent         string `header:"User-Agent"`
-	LoginType         string `header:"Login-Type,optional"`
+	IP                string `header:"X-Original-Forwarded-For" swaggerignore:"true"`
+	UserAgent         string `header:"User-Agent" swaggerignore:"true"`
+	LoginType         string `header:"Login-Type,optional" swaggerignore:"true"`
 	CfToken           string `json:"cf_token,optional"`
 }
 
@@ -237,21 +237,21 @@ type UserLoginRequest struct {
 	Identifier string `json:"identifier"`
 	Email      string `json:"email" validate:"required,email"`
 	Password   string `json:"password" validate:"required"`
-	IP         string `header:"X-Original-Forwarded-For"`
-	UserAgent  string `header:"User-Agent"`
-	LoginType  string `header:"Login-Type"`
+	IP         string `header:"X-Original-Forwarded-For" swaggerignore:"true"`
+	UserAgent  string `header:"User-Agent" swaggerignore:"true"`
+	LoginType  string `header:"Login-Type" swaggerignore:"true"`
 	CfToken    string `json:"cf_token,optional"`
 }
 
 type UserRegisterRequest struct {
 	Identifier string `json:"identifier"`
 	Email      string `json:"email" validate:"required,email"`
-	Password   string `json:"password" validate:"required"`
+	Password   string `json:"password" validate:"required,min=8,max=128"`
 	Invite     string `json:"invite,optional"`
 	Code       string `json:"code,optional"`
-	IP         string `header:"X-Original-Forwarded-For"`
-	UserAgent  string `header:"User-Agent"`
-	LoginType  string `header:"Login-Type"`
+	IP         string `header:"X-Original-Forwarded-For" swaggerignore:"true"`
+	UserAgent  string `header:"User-Agent" swaggerignore:"true"`
+	LoginType  string `header:"Login-Type" swaggerignore:"true"`
 	CfToken    string `json:"cf_token,optional"`
 }
 

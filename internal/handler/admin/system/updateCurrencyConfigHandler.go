@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/system"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Update Currency Config
+// UpdateCurrencyConfigHandler documents Update Currency Config.
+//
+// @Summary Update Currency Config
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.CurrencyConfig true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/system/currency_config [put]
 func UpdateCurrencyConfigHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.CurrencyConfig
@@ -25,8 +33,7 @@ func UpdateCurrencyConfigHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := system.NewUpdateCurrencyConfigLogic(ctx, svcCtx)
-		err := l.UpdateCurrencyConfig(&req)
+		err := svcCtx.Platform.UpdateCurrencyConfig(ctx, &req)
 		result.HttpResult(c, nil, err)
 	}
 }

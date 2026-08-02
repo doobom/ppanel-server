@@ -4,14 +4,21 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/auth/oauth"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// OAuth login
+// OAuthLoginHandler documents OAuth login.
+//
+// @Summary OAuth login
+// @Tags common
+// @Accept json
+// @Produce json
+// @Param request body dto.OAthLoginRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.OAuthLoginResponse}
+// @Router /v1/auth/oauth/login [post]
 func OAuthLoginHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.OAthLoginRequest
@@ -25,8 +32,7 @@ func OAuthLoginHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := oauth.NewOAuthLoginLogic(ctx, svcCtx)
-		resp, err := l.OAuthLogin(&req)
+		resp, err := svcCtx.Identity.OAuthLogin(ctx, &req)
 		result.HttpResult(c, resp, err)
 	}
 }

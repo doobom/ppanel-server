@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/ads"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Get Ads List
+// GetAdsListHandler documents Get Ads List.
+//
+// @Summary Get Ads List
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request query dto.GetAdsListRequest false "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.GetAdsListResponse}
+// @Router /v1/admin/ads/list [get]
 func GetAdsListHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.GetAdsListRequest
@@ -25,8 +33,7 @@ func GetAdsListHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := ads.NewGetAdsListLogic(ctx, svcCtx)
-		resp, err := l.GetAdsList(&req)
+		resp, err := svcCtx.Support.GetAdsList(ctx, &req)
 		result.HttpResult(c, resp, err)
 	}
 }

@@ -3,7 +3,7 @@ package adapter
 import (
 	"strings"
 
-	"github.com/perfect-panel/server/internal/model/entity/node"
+	"github.com/perfect-panel/server/internal/module/network/entity/node"
 	"github.com/perfect-panel/server/pkg/logger"
 )
 
@@ -114,6 +114,8 @@ func (adapter *Adapter) Proxies(servers []*node.Node) ([]Proxy, error) {
 			if protocolType == itemProtocol {
 				protocol.Type = protocolType
 				plugin, pluginOptions := clientPluginConfig(protocol, item.Address)
+				// 证书锚定与跳过验证互斥：客户端一旦跳过校验，下发的指纹便形同虚设。
+				allowInsecure := protocol.AllowInsecure && protocol.CertPinSHA256 == ""
 				proxies = append(
 					proxies,
 					Proxy{
@@ -129,7 +131,7 @@ func (adapter *Adapter) Proxies(servers []*node.Node) ([]Proxy, error) {
 						Security:                protocol.Security,
 						SNI:                     protocol.SNI,
 						ALPN:                    protocol.ALPN,
-						AllowInsecure:           protocol.AllowInsecure,
+						AllowInsecure:           allowInsecure,
 						Fingerprint:             protocol.Fingerprint,
 						RealityServerAddr:       protocol.RealityServerAddr,
 						RealityServerPort:       protocol.RealityServerPort,
@@ -181,6 +183,7 @@ func (adapter *Adapter) Proxies(servers []*node.Node) ([]Proxy, error) {
 						CertMode:                protocol.CertMode,
 						CertDNSProvider:         protocol.CertDNSProvider,
 						CertDNSEnv:              protocol.CertDNSEnv,
+						CertPinSHA256:           protocol.CertPinSHA256,
 					},
 				)
 			}

@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/log"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Filter commission log
+// FilterCommissionLogHandler documents Filter commission log.
+//
+// @Summary Filter commission log
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request query dto.FilterCommissionLogRequest false "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.FilterCommissionLogResponse}
+// @Router /v1/admin/log/commission/list [get]
 func FilterCommissionLogHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.FilterCommissionLogRequest
@@ -25,8 +33,7 @@ func FilterCommissionLogHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := log.NewFilterCommissionLogLogic(ctx, svcCtx)
-		resp, err := l.FilterCommissionLog(&req)
+		resp, err := svcCtx.Platform.FilterCommissionLog(ctx, &req)
 		result.HttpResult(c, resp, err)
 	}
 }

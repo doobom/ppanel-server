@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/user"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// User device
+// UpdateUserDeviceHandler documents User device.
+//
+// @Summary User device
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.UserDevice true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/user/device [put]
 func UpdateUserDeviceHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.UserDevice
@@ -25,8 +33,7 @@ func UpdateUserDeviceHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := user.NewUpdateUserDeviceLogic(ctx, svcCtx)
-		err := l.UpdateUserDevice(&req)
+		err := svcCtx.Identity.UpdateUserDevice(ctx, &req)
 		result.HttpResult(c, nil, err)
 	}
 }

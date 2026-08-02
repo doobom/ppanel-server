@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/user"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Delete user device
+// DeleteUserDeviceHandler documents Delete user device.
+//
+// @Summary Delete user device
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.DeleteUserDeivceRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/user/device [delete]
 func DeleteUserDeviceHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.DeleteUserDeivceRequest
@@ -25,8 +33,7 @@ func DeleteUserDeviceHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := user.NewDeleteUserDeviceLogic(ctx, svcCtx)
-		err := l.DeleteUserDevice(&req)
+		err := svcCtx.Identity.DeleteUserDevice(ctx, &req)
 		result.HttpResult(c, nil, err)
 	}
 }

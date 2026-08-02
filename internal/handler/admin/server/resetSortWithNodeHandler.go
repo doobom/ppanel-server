@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/server"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Reset node sort
+// ResetSortWithNodeHandler documents Reset node sort.
+//
+// @Summary Reset node sort
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.ResetSortRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/server/node/sort [post]
 func ResetSortWithNodeHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.ResetSortRequest
@@ -25,8 +33,7 @@ func ResetSortWithNodeHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := server.NewResetSortWithNodeLogic(c, svcCtx)
-		err := l.ResetSortWithNode(&req)
+		err := svcCtx.Network.ResetSortWithNode(c, &req)
 		result.HttpResult(ctx, nil, err)
 	}
 }

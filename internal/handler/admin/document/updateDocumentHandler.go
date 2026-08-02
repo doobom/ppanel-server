@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/document"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Update document
+// UpdateDocumentHandler documents Update document.
+//
+// @Summary Update document
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.UpdateDocumentRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/document/ [put]
 func UpdateDocumentHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.UpdateDocumentRequest
@@ -25,8 +33,7 @@ func UpdateDocumentHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := document.NewUpdateDocumentLogic(ctx, svcCtx)
-		err := l.UpdateDocument(&req)
+		err := svcCtx.Support.UpdateDocument(ctx, &req)
 		result.HttpResult(c, nil, err)
 	}
 }

@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/log"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Update log setting
+// UpdateLogSettingHandler documents Update log setting.
+//
+// @Summary Update log setting
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.LogSetting true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/log/setting [post]
 func UpdateLogSettingHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.LogSetting
@@ -25,8 +33,7 @@ func UpdateLogSettingHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := log.NewUpdateLogSettingLogic(ctx, svcCtx)
-		err := l.UpdateLogSetting(&req)
+		err := svcCtx.Platform.UpdateLogSetting(ctx, &req)
 		result.HttpResult(c, nil, err)
 	}
 }

@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/document"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Create document
+// CreateDocumentHandler documents Create document.
+//
+// @Summary Create document
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.CreateDocumentRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/document/ [post]
 func CreateDocumentHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.CreateDocumentRequest
@@ -25,8 +33,7 @@ func CreateDocumentHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := document.NewCreateDocumentLogic(ctx, svcCtx)
-		err := l.CreateDocument(&req)
+		err := svcCtx.Support.CreateDocument(ctx, &req)
 		result.HttpResult(c, nil, err)
 	}
 }

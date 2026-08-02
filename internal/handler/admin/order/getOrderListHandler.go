@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/order"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Get order list
+// GetOrderListHandler documents Get order list.
+//
+// @Summary Get order list
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request query dto.GetOrderListRequest false "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.GetOrderListResponse}
+// @Router /v1/admin/order/list [get]
 func GetOrderListHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.GetOrderListRequest
@@ -25,8 +33,7 @@ func GetOrderListHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := order.NewGetOrderListLogic(c, svcCtx)
-		resp, err := l.GetOrderList(&req)
+		resp, err := svcCtx.Billing.GetOrderList(c, &req)
 		result.HttpResult(ctx, resp, err)
 	}
 }

@@ -6,9 +6,9 @@ import (
 )
 
 func RegisterHandlers(router *server.Hertz, serverCtx *svc.ServiceContext) {
+	registerEdgeRoutes(router, serverCtx)
 	registerSubscribeConfigRoutes(router, serverCtx)
 	registerServerRoutes(router, serverCtx)
-	registerAdminPluginRoutes(router, serverCtx)
 
 	registerAdminAdsRoutes(router, serverCtx)
 	registerAdminAnnouncementRoutes(router, serverCtx)
@@ -34,6 +34,7 @@ func RegisterHandlers(router *server.Hertz, serverCtx *svc.ServiceContext) {
 	registerPublicAnnouncementRoutes(router, serverCtx)
 	registerPublicDocumentRoutes(router, serverCtx)
 	registerPublicOrderRoutes(router, serverCtx)
+	registerPublicOrderV2Routes(router, serverCtx)
 	registerPublicPaymentRoutes(router, serverCtx)
 	registerPublicPortalRoutes(router, serverCtx)
 	registerPublicSubscribeRoutes(router, serverCtx)

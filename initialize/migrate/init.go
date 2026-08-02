@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/perfect-panel/server/internal/model/entity/user"
+	"github.com/perfect-panel/server/internal/module/identity/entity/user"
 	"github.com/perfect-panel/server/pkg/authmethod"
 	"github.com/perfect-panel/server/pkg/logger"
 	"github.com/perfect-panel/server/pkg/tool"
@@ -38,6 +38,7 @@ func CreateAdminUser(email, password string, tx *gorm.DB) error {
 
 		u := user.User{
 			Password:  tool.EncodePassWord(password),
+			Algo:      tool.PasswordAlgoArgon2id,
 			IsAdmin:   &enable,
 			ReferCode: uuidx.UserInviteCode(time.Now().Unix()),
 		}

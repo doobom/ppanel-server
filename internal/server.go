@@ -56,13 +56,6 @@ func (m *Service) Start() {
 		panic("config file path is nil")
 	}
 
-	// 等待插件管理器加载完成
-	if m.svc.PluginReady != nil {
-		if err := m.svc.PluginReady.WaitReady(context.Background()); err != nil {
-			logger.Errorf("plugin manager not ready: %s", err.Error())
-		}
-	}
-
 	// get server port
 	port := m.svc.Config.Port
 	host := m.svc.Config.Host
@@ -87,7 +80,7 @@ func (m *Service) Start() {
 
 	serverAddr := fmt.Sprintf("%v:%d", host, port)
 	initialize.StartInitSystemConfig(m.svc)
-	if err := m.svc.Store.User().ValidateEmailIdentityUniqueness(context.Background()); err != nil {
+	if err := m.svc.Store.UserAuth().ValidateEmailIdentityUniqueness(context.Background()); err != nil {
 		panic(err.Error())
 	}
 	m.server = newTransportServer(m.svc, serverAddr)
@@ -103,6 +96,32 @@ func (m *Service) Start() {
 		trace.StopAgent()
 	})
 	m.svc.Restart = m.Restart
+	m.svc.ReinitSubsystem = func(subsystem string) {
+		switch subsystem {
+		case "verify":
+			initialize.Verify(m.svc)
+		case "node":
+			initialize.Node(m.svc)
+		case "telegram":
+			initialize.Telegram(m.svc)
+		case "currency":
+			initialize.Currency(m.svc)
+		case "register":
+			initialize.Register(m.svc)
+		case "site":
+			initialize.Site(m.svc)
+		case "invite":
+			initialize.Invite(m.svc)
+		case "subscribe":
+			initialize.Subscribe(m.svc)
+		case "email":
+			initialize.Email(m.svc)
+		case "mobile":
+			initialize.Mobile(m.svc)
+		case "device":
+			initialize.Device(m.svc)
+		}
+	}
 	logger.Infof("server start at %v", serverAddr)
 	m.server.Start()
 }

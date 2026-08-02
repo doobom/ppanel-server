@@ -40,6 +40,28 @@ func (m *Service) Start() {
 	if _, err := m.server.Register("@every 60s", reconcilePaidOrdersTask, asynq.MaxRetry(3)); err != nil {
 		logger.Errorf("register paid order reconciliation task failed: %s", err.Error())
 	}
+	// A one-shot close task can be lost before enqueue or exhaust retries. The
+	// pending-state reconciler is the durable backstop for stock/coupon holds.
+	reconcilePendingOrdersTask := asynq.NewTask(types.SchedulerReconcilePendingOrders, nil)
+	if _, err := m.server.Register("@every 60s", reconcilePendingOrdersTask, asynq.MaxRetry(3)); err != nil {
+		logger.Errorf("register pending order reconciliation task failed: %s", err.Error())
+	}
+	// Drain the order-event outbox frequently enough for interactive checkout,
+	// while retaining the database event record as the recovery path.
+	publishOrderEventsTask := asynq.NewTask(types.SchedulerPublishOrderEvents, nil)
+	if _, err := m.server.Register("@every 5s", publishOrderEventsTask, asynq.MaxRetry(3)); err != nil {
+		logger.Errorf("register order event publisher task failed: %s", err.Error())
+	}
+	// Drain the generic domain-event outbox: registration trials and future
+	// cross-module events ride on it.
+	dispatchDomainEventsTask := asynq.NewTask(types.SchedulerDispatchDomainEvents, nil)
+	if _, err := m.server.Register("@every 5s", dispatchDomainEventsTask, asynq.MaxRetry(3)); err != nil {
+		logger.Errorf("register domain event dispatcher task failed: %s", err.Error())
+	}
+	cleanupOrderEventsTask := asynq.NewTask(types.SchedulerCleanupOrderEvents, nil)
+	if _, err := m.server.Register("0 3 * * *", cleanupOrderEventsTask, asynq.MaxRetry(3)); err != nil {
+		logger.Errorf("register order event cleanup task failed: %s", err.Error())
+	}
 	//// schedule total server data task: every 5 minutes
 	//totalServerDataTask := asynq.NewTask(types.SchedulerTotalServerData, nil)
 	//if _, err := m.server.Register("@every 180s", totalServerDataTask); err != nil {
@@ -51,6 +73,21 @@ func (m *Service) Start() {
 		logger.Errorf("register reset traffic task failed: %s", err.Error())
 	}
 
+	// schedule pre-expiry reminder task: every day at 10:00. A reminder is
+	// user-facing, so it goes out during the day rather than overnight, and
+	// once daily rather than on the minute-by-minute lifecycle sweep.
+	remindExpiringTask := asynq.NewTask(types.SchedulerRemindExpiringSubscriptions, nil)
+	if _, err := m.server.Register("0 10 * * *", remindExpiringTask, asynq.MaxRetry(3)); err != nil {
+		logger.Errorf("register expiring subscription reminder task failed: %s", err.Error())
+	}
+
+	// schedule daily order report task: every day at 00:10, reporting the
+	// day that just ended
+	dailyOrderReportTask := asynq.NewTask(types.SchedulerDailyOrderReport, nil)
+	if _, err := m.server.Register("10 0 * * *", dailyOrderReportTask, asynq.MaxRetry(3)); err != nil {
+		logger.Errorf("register daily order report task failed: %s", err.Error())
+	}
+
 	// schedule traffic stat task: every day at 00:00
 	trafficStatTask := asynq.NewTask(types.SchedulerTrafficStat, nil)
 	if _, err := m.server.Register("0 0 * * *", trafficStatTask, asynq.MaxRetry(3)); err != nil {
@@ -58,7 +95,7 @@ func (m *Service) Start() {
 	}
 
 	// schedule update exchange rate task: every day at 01:00
-	rateTask := asynq.NewTask(types.ForthwithQuotaTask, nil)
+	rateTask := asynq.NewTask(types.SchedulerExchangeRate, nil)
 	if _, err := m.server.Register("0 1 * * *", rateTask, asynq.MaxRetry(3)); err != nil {
 		logger.Errorf("register update exchange rate task failed: %s", err.Error())
 	}

@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/ads"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Create Ads
+// CreateAdsHandler documents Create Ads.
+//
+// @Summary Create Ads
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.CreateAdsRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/ads/ [post]
 func CreateAdsHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.CreateAdsRequest
@@ -25,8 +33,7 @@ func CreateAdsHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := ads.NewCreateAdsLogic(ctx, svcCtx)
-		err := l.CreateAds(&req)
+		err := svcCtx.Support.CreateAds(ctx, &req)
 		result.HttpResult(c, nil, err)
 	}
 }

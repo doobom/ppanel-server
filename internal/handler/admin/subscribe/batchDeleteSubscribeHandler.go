@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/subscribe"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Batch delete subscribe
+// BatchDeleteSubscribeHandler documents Batch delete subscribe.
+//
+// @Summary Batch delete subscribe
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.BatchDeleteSubscribeRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/subscribe/batch [delete]
 func BatchDeleteSubscribeHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.BatchDeleteSubscribeRequest
@@ -25,8 +33,7 @@ func BatchDeleteSubscribeHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := subscribe.NewBatchDeleteSubscribeLogic(c, svcCtx)
-		err := l.BatchDeleteSubscribe(&req)
+		err := svcCtx.Subscription.BatchDeleteSubscribe(c, &req)
 		result.HttpResult(ctx, nil, err)
 	}
 }

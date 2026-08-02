@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/log"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Filter mobile log
+// FilterMobileLogHandler documents Filter mobile log.
+//
+// @Summary Filter mobile log
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request query dto.FilterLogParams false "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.FilterMobileLogResponse}
+// @Router /v1/admin/log/mobile/list [get]
 func FilterMobileLogHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.FilterLogParams
@@ -25,8 +33,7 @@ func FilterMobileLogHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := log.NewFilterMobileLogLogic(ctx, svcCtx)
-		resp, err := l.FilterMobileLog(&req)
+		resp, err := svcCtx.Platform.FilterMobileLog(ctx, &req)
 		result.HttpResult(c, resp, err)
 	}
 }

@@ -1,0 +1,366 @@
+package checkout
+
+import (
+	"context"
+	"encoding/json"
+	stderrors "errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/perfect-panel/server/internal/model/dto"
+	"github.com/perfect-panel/server/internal/module/billing/entity/order"
+	"github.com/perfect-panel/server/internal/module/billing/entity/payment"
+	"github.com/perfect-panel/server/internal/module/identity/entity/user"
+	logEntity "github.com/perfect-panel/server/internal/module/platform/entity/log"
+	"github.com/perfect-panel/server/internal/orderflow"
+	"github.com/perfect-panel/server/internal/repository"
+	"github.com/perfect-panel/server/pkg/constant"
+	"github.com/perfect-panel/server/pkg/logger"
+	paymentPlatform "github.com/perfect-panel/server/pkg/payment"
+	"github.com/perfect-panel/server/pkg/payment/cryptomus"
+	"github.com/perfect-panel/server/pkg/payment/epay"
+	"github.com/perfect-panel/server/pkg/payment/stripe"
+	"github.com/perfect-panel/server/pkg/timeutil"
+	"github.com/pkg/errors"
+)
+
+const orderTypeSubscribe uint8 = 1
+
+// ErrGatewayUnconfirmed reports that an EPay order could not be confirmed as
+// paid, so the close was refused and the order intentionally stays pending.
+// Schedulers treat it as an expected outcome, not a per-order failure.
+var ErrGatewayUnconfirmed = stderrors.New("gateway could not confirm the order as paid")
+
+// Close closes a pending order: the billing transaction releases the coupon
+// reservation and refunds the gift deduction, then the reserved plan
+// inventory returns in its own subscription-domain transaction (ADR-001
+// step 2). Orders whose gateway checkout already collected money are settled
+// instead of closed.
+func (s *Service) Close(ctx context.Context, req *dto.CloseOrderRequest) error {
+	log := logger.WithContext(ctx)
+	// Find order information by order number
+	orderInfo, err := s.deps.Orders.FindOneByOrderNo(ctx, req.OrderNo)
+	if err != nil {
+		log.Errorw("[CloseOrder] Find order info failed",
+			logger.Field("error", err.Error()),
+			logger.Field("orderNo", req.OrderNo),
+		)
+		return nil
+	}
+	// Public callers are authenticated by the route. Queue workers use a
+	// context without a user and are the only internal callers allowed to close
+	// any expired order.
+	currentUser, userInitiated := ctx.Value(constant.CtxKeyUser).(*user.User)
+	userInitiated = userInitiated && currentUser != nil
+	if userInitiated && orderInfo.UserId != currentUser.Id {
+		return errors.New("order does not belong to the current user")
+	}
+	// If the order status is not 1, it means that the order has been closed or paid
+	if orderInfo.Status != 1 {
+		log.Infow("[CloseOrder] Order status is not 1",
+			logger.Field("orderNo", req.OrderNo),
+			logger.Field("status", orderInfo.Status),
+		)
+		if orderInfo.Status == 3 {
+			// Resume a restoration lost between the close commit and the
+			// inventory transaction; RestoreInventoryOnce no-ops when the
+			// order never reserved or already restored.
+			return s.restoreReservedInventory(ctx, orderInfo)
+		}
+		return nil
+	}
+	settled, err := s.settleOrCancelGatewayOrder(ctx, orderInfo, userInitiated)
+	if err != nil {
+		return err
+	}
+	if settled {
+		return nil
+	}
+
+	var closed bool
+	err = s.deps.Store.InBillingTx(ctx, func(txStore repository.BillingStore) error {
+		// Only the still-pending order may be closed.  A payment callback can
+		// race this task, so an unconditional status write would otherwise turn
+		// a paid order back into a closed order.
+		closed, err = txStore.Order().UpdateOrderStatusFrom(ctx, req.OrderNo, 1, 3)
+		if err != nil {
+			log.Errorw("[CloseOrder] Update order status failed",
+				logger.Field("error", err.Error()),
+				logger.Field("orderNo", req.OrderNo),
+			)
+			return err
+		}
+		if !closed {
+			return nil
+		}
+		if orderInfo.Coupon != "" && orderInfo.CouponReserved {
+			if err := txStore.Coupon().ReleaseUsage(ctx, orderInfo.Coupon); err != nil {
+				return err
+			}
+		}
+		// Keep closed guest orders for payment audit and reconciliation.  Deleting
+		// them used to discard evidence of a late provider payment and, because
+		// of the early return, also skipped restoration of reserved inventory.
+		// refund deduction amount to user deduction balance
+		if orderInfo.GiftAmount > 0 {
+			userInfo, err := txStore.Wallet().FindOneForUpdate(ctx, orderInfo.UserId)
+			if err != nil {
+				log.Errorw("[CloseOrder] Find user info failed",
+					logger.Field("error", err.Error()),
+					logger.Field("user_id", orderInfo.UserId),
+				)
+				return err
+			}
+			deduction := userInfo.GiftAmount + orderInfo.GiftAmount
+			userInfo.GiftAmount = deduction
+			err = txStore.Wallet().UpdateBalanceFields(ctx, userInfo)
+			if err != nil {
+				log.Errorw("[CloseOrder] Refund deduction amount failed",
+					logger.Field("error", err.Error()),
+					logger.Field("uid", orderInfo.UserId),
+					logger.Field("deduction", orderInfo.GiftAmount),
+				)
+				return err
+			}
+			// Record the deduction refund log
+			giftLog := logEntity.Gift{
+				Type:        logEntity.GiftTypeIncrease,
+				OrderNo:     orderInfo.OrderNo,
+				SubscribeId: 0,
+				Amount:      orderInfo.GiftAmount,
+				Balance:     deduction,
+				Remark:      "Order cancellation refund",
+				Timestamp:   timeutil.Now().UnixMilli(),
+			}
+			content, _ := giftLog.Marshal()
+
+			err = txStore.Log().Insert(ctx, &logEntity.SystemLog{
+				Id:       0,
+				Type:     logEntity.TypeGift.Uint8(),
+				Date:     timeutil.Now().Format(time.DateOnly),
+				ObjectID: userInfo.UserId,
+				Content:  string(content),
+			})
+			if err != nil {
+				log.Errorw("[CloseOrder] Record cancellation refund log failed",
+					logger.Field("error", err.Error()),
+					logger.Field("uid", orderInfo.UserId),
+					logger.Field("deduction", orderInfo.GiftAmount),
+				)
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		logger.Errorf("[CloseOrder] Transaction failed: %v", err.Error())
+		return err
+	}
+	if !closed {
+		return nil
+	}
+	// The reserved plan inventory returns in its own subscription-domain
+	// transaction (ADR-001 step 2). A crash before this point is resumed by
+	// the retried close task via the status==3 branch above.
+	return s.restoreReservedInventory(ctx, orderInfo)
+}
+
+// restoreReservedInventory returns the closed order's reserved inventory
+// unit. Only new subscription purchases reserve plan inventory; renewals and
+// traffic resets reference a plan too, but never consumed stock, and the
+// reserve marker check inside RestoreInventoryOnce keeps them (and stock-out
+// compensation closes) from adding stock that was never taken.
+func (s *Service) restoreReservedInventory(ctx context.Context, orderInfo *order.Order) error {
+	if orderInfo.Type != orderTypeSubscribe || orderInfo.SubscribeId <= 0 {
+		return nil
+	}
+	if err := orderflow.RestoreInventoryOnce(ctx, s.deps.Store, orderInfo.OrderNo, orderInfo.SubscribeId); err != nil {
+		logger.WithContext(ctx).Errorw("[CloseOrder] Restore subscribe inventory failed",
+			logger.Field("error", err.Error()),
+			logger.Field("subscribeId", orderInfo.SubscribeId),
+			logger.Field("orderNo", orderInfo.OrderNo),
+		)
+		return err
+	}
+	return nil
+}
+
+// settleOrCancelGatewayOrder ensures that closing locally cannot leave an
+// active provider checkout able to charge the user after stock and coupons
+// have been released. userInitiated marks a cancellation the order's owner
+// explicitly requested, which consents to forfeiting an unconfirmed payment.
+func (s *Service) settleOrCancelGatewayOrder(ctx context.Context, orderInfo *order.Order, userInitiated bool) (bool, error) {
+	switch paymentPlatform.ParsePlatform(orderInfo.Method) {
+	case paymentPlatform.Stripe:
+		return s.settleOrCancelStripeOrder(ctx, orderInfo)
+	case paymentPlatform.EPay:
+		return s.settleEPayOrder(ctx, orderInfo, userInitiated)
+	case paymentPlatform.Cryptomus:
+		return s.settleCryptomusOrder(ctx, orderInfo, userInitiated)
+	default:
+		return false, nil
+	}
+}
+
+func (s *Service) settleOrCancelStripeOrder(ctx context.Context, orderInfo *order.Order) (bool, error) {
+	if orderInfo.TradeNo == "" {
+		return false, nil
+	}
+	paymentConfig, err := s.deps.Payments.FindOne(ctx, orderInfo.PaymentId)
+	if err != nil {
+		return false, err
+	}
+	config := payment.StripeConfig{}
+	if err := json.Unmarshal([]byte(paymentConfig.Config), &config); err != nil {
+		return false, err
+	}
+	client := stripe.NewClient(stripe.Config{
+		PublicKey:     config.PublicKey,
+		SecretKey:     config.SecretKey,
+		WebhookSecret: config.WebhookSecret,
+	})
+	stripeOrder := &stripe.Order{
+		OrderNo:   orderInfo.OrderNo,
+		Subscribe: "", // subscribe metadata is informational; immutable payment fields below are authoritative.
+		Amount:    orderInfo.Amount,
+		Currency:  s.deps.CurrencyUnit(),
+		Payment:   config.Payment,
+	}
+	paid, err := client.VerifyPaymentIntent(stripeOrder, orderInfo.TradeNo)
+	if err != nil {
+		return false, err
+	}
+	if paid {
+		if err := s.settleVerifiedPayment(ctx, orderInfo, orderInfo.TradeNo); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	if err := client.CancelPaymentIntent(orderInfo.TradeNo); err == nil {
+		return false, nil
+	}
+
+	// A payment can finish between the status query and cancellation.  Recheck
+	// once so that case is settled rather than closed locally.
+	paid, err = client.VerifyPaymentIntent(stripeOrder, orderInfo.TradeNo)
+	if err != nil {
+		return false, err
+	}
+	if !paid {
+		return false, fmt.Errorf("cancel Stripe payment intent %s failed", orderInfo.TradeNo)
+	}
+	if err := s.settleVerifiedPayment(ctx, orderInfo, orderInfo.TradeNo); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// Cryptomus invoices cannot be cancelled through the API, but they expire on
+// their own after the checkout lifetime and report a final state. Closing is
+// safe only when the gateway confirms no money was collected: a paid invoice
+// is settled instead, a still-active invoice keeps the order pending unless
+// the owner explicitly forfeits it, and an underpaid (wrong_amount) invoice
+// stays pending for manual resolution because funds were received without
+// covering the order.
+func (s *Service) settleCryptomusOrder(ctx context.Context, orderInfo *order.Order, userInitiated bool) (bool, error) {
+	if orderInfo.PaymentCurrency == "" {
+		return false, nil // checkout was never started; safe to close.
+	}
+	paymentConfig, err := s.deps.Payments.FindOne(ctx, orderInfo.PaymentId)
+	if err != nil {
+		return false, err
+	}
+	config := payment.CryptomusConfig{}
+	if err := json.Unmarshal([]byte(paymentConfig.Config), &config); err != nil {
+		return false, err
+	}
+	client := cryptomus.NewClient(cryptomus.Config{MerchantID: config.MerchantID, APIKey: config.APIKey})
+	// The trade number is claimed right after invoice creation, but a checkout
+	// may have crashed between the two steps; the order-number lookup still
+	// finds the invoice the gateway holds for this order.
+	invoice, err := client.GetInvoice(orderInfo.TradeNo, orderInfo.OrderNo)
+	if err != nil {
+		if cryptomus.IsNotFound(err) {
+			return false, nil // no invoice was ever issued; safe to close.
+		}
+		if userInitiated {
+			logger.WithContext(ctx).Infow("[CloseOrder] user-requested close of Cryptomus order without gateway confirmation",
+				logger.Field("orderNo", orderInfo.OrderNo),
+				logger.Field("queryError", err.Error()),
+			)
+			return false, nil
+		}
+		return false, fmt.Errorf("cannot safely expire Cryptomus order %s: %v: %w", orderInfo.OrderNo, err, ErrGatewayUnconfirmed)
+	}
+	if invoice.Paid() {
+		amount, err := cryptomus.ParseMoney(invoice.Amount)
+		if err != nil || invoice.OrderNo != orderInfo.OrderNo || amount != orderInfo.PaymentAmount || !strings.EqualFold(invoice.Currency, orderInfo.PaymentCurrency) {
+			return false, fmt.Errorf("Cryptomus order %s query does not match payment expectation", orderInfo.OrderNo)
+		}
+		if err := s.settleVerifiedPayment(ctx, orderInfo, invoice.UUID); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	// wrong_amount and locked are final states that still hold customer money
+	// (an underpayment or AML-frozen funds); they stay pending for manual
+	// resolution instead of silently releasing the reservation.
+	if state := invoice.State(); invoice.IsFinal && state != cryptomus.StatusWrongAmount && state != cryptomus.StatusLocked {
+		return false, nil // invoice ended without payment; safe to close.
+	}
+	if userInitiated {
+		return false, nil // the owner explicitly forfeits the unconfirmed invoice.
+	}
+	return false, fmt.Errorf("cannot safely expire Cryptomus order %s with invoice status %q: %w", orderInfo.OrderNo, invoice.State(), ErrGatewayUnconfirmed)
+}
+
+// EPay-compatible gateways have no standard cancellation API. Once a payment
+// URL has been issued, retaining the pending reservation is safer than closing
+// locally and accepting a later customer charge with no fulfillment. Gateways
+// with an order-query endpoint are reconciled here; unsupported or unavailable
+// gateways remain pending for retry/manual resolution instead of losing funds.
+// A user-initiated cancellation is the exception: the owner explicitly gives
+// up the order, so absent any evidence of payment the close proceeds. A late
+// callback on the closed order is still rejected and leaves an audit trail.
+func (s *Service) settleEPayOrder(ctx context.Context, orderInfo *order.Order, userInitiated bool) (bool, error) {
+	if orderInfo.PaymentCurrency == "" {
+		return false, nil // checkout was never started; safe to close.
+	}
+	paymentConfig, err := s.deps.Payments.FindOne(ctx, orderInfo.PaymentId)
+	if err != nil {
+		return false, err
+	}
+	config := payment.EPayConfig{}
+	if err := json.Unmarshal([]byte(paymentConfig.Config), &config); err != nil {
+		return false, err
+	}
+	result, err := epay.NewClient(config.Pid, config.Url, config.Key, config.Type).QueryOrder(orderInfo.OrderNo)
+	if err != nil {
+		if userInitiated {
+			logger.WithContext(ctx).Infow("[CloseOrder] user-requested close of EPay order without gateway confirmation",
+				logger.Field("orderNo", orderInfo.OrderNo),
+				logger.Field("queryError", err.Error()),
+			)
+			return false, nil
+		}
+		return false, fmt.Errorf("cannot safely expire EPay order %s: %v: %w", orderInfo.OrderNo, err, ErrGatewayUnconfirmed)
+	}
+	if !result.Paid {
+		if userInitiated {
+			return false, nil
+		}
+		return false, fmt.Errorf("cannot safely expire unpaid EPay order %s; gateway does not provide cancellation: %w", orderInfo.OrderNo, ErrGatewayUnconfirmed)
+	}
+	if result.StatusOnly {
+		return false, fmt.Errorf("cannot safely reconcile paid EPay order %s: gateway query has no transaction details", orderInfo.OrderNo)
+	}
+	amount, err := epay.ParseMoney(result.Money)
+	if err != nil || result.OrderNo != orderInfo.OrderNo || result.MerchantID != config.Pid || result.Type != config.Type || amount != orderInfo.PaymentAmount || result.TradeNo == "" {
+		return false, fmt.Errorf("EPay order %s query does not match payment expectation", orderInfo.OrderNo)
+	}
+	if err := s.settleVerifiedPayment(ctx, orderInfo, result.TradeNo); err != nil {
+		return false, err
+	}
+	return true, nil
+}

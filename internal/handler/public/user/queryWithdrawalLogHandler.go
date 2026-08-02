@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/public/user"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Query Withdrawal Log
+// QueryWithdrawalLogHandler documents Query Withdrawal Log.
+//
+// @Summary Query Withdrawal Log
+// @Tags user
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request query dto.QueryWithdrawalLogListRequest false "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.QueryWithdrawalLogListResponse}
+// @Router /v1/public/user/withdrawal_log [get]
 func QueryWithdrawalLogHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.QueryWithdrawalLogListRequest
@@ -25,8 +33,7 @@ func QueryWithdrawalLogHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := user.NewQueryWithdrawalLogLogic(c, svcCtx)
-		resp, err := l.QueryWithdrawalLog(&req)
+		resp, err := svcCtx.Billing.QueryWithdrawalLog(c, &req)
 		result.HttpResult(ctx, resp, err)
 	}
 }

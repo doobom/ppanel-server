@@ -4,14 +4,21 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/common"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Get sms verification code
+// SendSmsCodeHandler documents Get sms verification code.
+//
+// @Summary Get sms verification code
+// @Tags common
+// @Accept json
+// @Produce json
+// @Param request body dto.SendSmsCodeRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.SendCodeResponse}
+// @Router /v1/common/send_sms_code [post]
 func SendSmsCodeHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.SendSmsCodeRequest
@@ -25,8 +32,7 @@ func SendSmsCodeHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := common.NewSendSmsCodeLogic(ctx, svcCtx)
-		resp, err := l.SendSmsCode(&req)
+		resp, err := svcCtx.Identity.SendSmsCode(ctx, &req)
 		result.HttpResult(c, resp, err)
 	}
 }

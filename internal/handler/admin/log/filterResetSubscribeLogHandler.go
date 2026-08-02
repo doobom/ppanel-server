@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/log"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Filter reset subscribe log
+// FilterResetSubscribeLogHandler documents Filter reset subscribe log.
+//
+// @Summary Filter reset subscribe log
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request query dto.FilterResetSubscribeLogRequest false "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.FilterResetSubscribeLogResponse}
+// @Router /v1/admin/log/subscribe/reset/list [get]
 func FilterResetSubscribeLogHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(ctx context.Context, c *app.RequestContext) {
 		var req dto.FilterResetSubscribeLogRequest
@@ -25,8 +33,7 @@ func FilterResetSubscribeLogHandler(svcCtx *svc.ServiceContext) app.HandlerFunc 
 			return
 		}
 
-		l := log.NewFilterResetSubscribeLogLogic(ctx, svcCtx)
-		resp, err := l.FilterResetSubscribeLog(&req)
+		resp, err := svcCtx.Platform.FilterResetSubscribeLog(ctx, &req)
 		result.HttpResult(c, resp, err)
 	}
 }

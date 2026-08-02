@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/server"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Delete Node
+// DeleteNodeHandler documents Delete Node.
+//
+// @Summary Delete Node
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.DeleteNodeRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/server/node/delete [post]
 func DeleteNodeHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.DeleteNodeRequest
@@ -25,8 +33,7 @@ func DeleteNodeHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := server.NewDeleteNodeLogic(c, svcCtx)
-		err := l.DeleteNode(&req)
+		err := svcCtx.Network.DeleteNode(c, &req)
 		result.HttpResult(ctx, nil, err)
 	}
 }

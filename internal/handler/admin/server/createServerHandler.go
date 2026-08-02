@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/server"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// CreateServerHandler Create Server
+// CreateServerHandler documents Create Server.
+//
+// @Summary Create Server
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.CreateServerRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/server/create [post]
 func CreateServerHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.CreateServerRequest
@@ -25,8 +33,7 @@ func CreateServerHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := server.NewCreateServerLogic(c, svcCtx)
-		err := l.CreateServer(&req)
+		err := svcCtx.Network.CreateServer(c, &req)
 		result.HttpResult(ctx, nil, err)
 	}
 }

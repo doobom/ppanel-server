@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/admin/marketing"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// StopBatchSendEmailTaskHandler Stop a batch send email task
+// StopBatchSendEmailTaskHandler documents Stop a batch send email task.
+//
+// @Summary Stop a batch send email task
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.StopBatchSendEmailTaskRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean
+// @Router /v1/admin/marketing/email/batch/stop [post]
 func StopBatchSendEmailTaskHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.StopBatchSendEmailTaskRequest
@@ -25,8 +33,7 @@ func StopBatchSendEmailTaskHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := marketing.NewStopBatchSendEmailTaskLogic(c, svcCtx)
-		err := l.StopBatchSendEmailTask(&req)
+		err := svcCtx.Support.StopBatchSendEmailTask(c, &req)
 		result.HttpResult(ctx, nil, err)
 	}
 }

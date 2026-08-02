@@ -4,14 +4,22 @@ import (
 	"context"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/perfect-panel/server/internal/logic/public/user"
 	"github.com/perfect-panel/server/internal/model/dto"
 	"github.com/perfect-panel/server/internal/svc"
 	"github.com/perfect-panel/server/pkg/httpx"
 	"github.com/perfect-panel/server/pkg/result"
 )
 
-// Bind OAuth
+// BindOAuthHandler documents Bind OAuth.
+//
+// @Summary Bind OAuth
+// @Tags user
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body dto.BindOAuthRequest true "Request parameters"
+// @Success 200 {object} result.ResponseSuccessBean{data=dto.BindOAuthResponse}
+// @Router /v1/public/user/bind_oauth [post]
 func BindOAuthHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 	return func(c context.Context, ctx *app.RequestContext) {
 		var req dto.BindOAuthRequest
@@ -25,8 +33,7 @@ func BindOAuthHandler(svcCtx *svc.ServiceContext) app.HandlerFunc {
 			return
 		}
 
-		l := user.NewBindOAuthLogic(c, svcCtx)
-		resp, err := l.BindOAuth(&req)
+		resp, err := svcCtx.Identity.BindOAuth(c, &req)
 		result.HttpResult(ctx, resp, err)
 	}
 }
